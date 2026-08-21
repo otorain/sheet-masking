@@ -61,9 +61,6 @@ Notes:
   against the Electron ABI.
 - pnpm 11 denies dependency build scripts unless they are explicitly allowed;
   see `allowBuilds` in `pnpm-workspace.yaml`.
-- The `postinstall` wrapper (`scripts/rebuild-native.mjs`) redirects HOME to a
-  project-local `.home/` when `$HOME` is read-only (e.g. CI sandboxes), since
-  `@electron/rebuild` caches headers in `~/.electron-gyp`.
 - `better-sqlite3` must stay in `dependencies` (not `devDependencies`) so
   `electron-builder` packages it with the app.
 

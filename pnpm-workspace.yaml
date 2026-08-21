@@ -1,7 +1,4 @@
 # pnpm 10+/11 settings live here (the `pnpm` field in package.json is ignored)
-# $HOME is read-only in this environment, so keep the pnpm store inside the project
-# (it is gitignored via .pnpm-store)
-# storeDir: .pnpm-store
 
 # pnpm 11 denies dependency build scripts unless explicitly allowed here
 # (this replaced the old `onlyBuiltDependencies` list):
