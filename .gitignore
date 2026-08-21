@@ -29,3 +29,5 @@ package-lock.json
 yarn.lock
 bun.lock
 
+# project-local fallback HOME used by scripts/rebuild-native.mjs
+/.home/

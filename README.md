@@ -42,6 +42,31 @@ Tailwind CSS v4 is wired up through the official Vite plugin:
 Start using utility classes directly in any Vue template, e.g.
 `class="mt-8 text-slate-500 dark:text-slate-400"`.
 
+## better-sqlite3
+
+`better-sqlite3` runs in the **main process only** (it is a native module and
+the renderer is sandboxed). The integration is:
+
+- `electron/main/db.ts` — lazily opens `global-news.db` in the app's
+  `userData` directory and creates a `notes` table (WAL mode)
+- `electron/main/index.ts` — exposes two IPC handlers: `db:status` and
+  `db:note:add`; the database is closed on `will-quit`
+- `src/App.vue` — renderer demo that calls `db:status` over IPC
+
+Notes:
+
+- better-sqlite3 v13 ships ABI-stable N-API prebuilds, so no source
+  compilation is needed for Electron; `postinstall` still runs
+  `electron-builder install-app-deps` to rebuild any future native modules
+  against the Electron ABI.
+- pnpm 11 denies dependency build scripts unless they are explicitly allowed;
+  see `allowBuilds` in `pnpm-workspace.yaml`.
+- The `postinstall` wrapper (`scripts/rebuild-native.mjs`) redirects HOME to a
+  project-local `.home/` when `$HOME` is read-only (e.g. CI sandboxes), since
+  `@electron/rebuild` caches headers in `~/.electron-gyp`.
+- `better-sqlite3` must stay in `dependencies` (not `devDependencies`) so
+  `electron-builder` packages it with the app.
+
 ## Debug
 
 ![electron-vite-react-debug.gif](https://github.com/electron-vite/electron-vite-react/blob/main/electron-vite-react-debug.gif?raw=true)

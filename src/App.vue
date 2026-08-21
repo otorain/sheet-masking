@@ -1,5 +1,18 @@
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import HelloWorld from './components/HelloWorld.vue'
+
+// better-sqlite3 runs in the main process; the renderer queries it over IPC.
+const dbStatus = ref('connecting…')
+
+onMounted(async () => {
+  try {
+    const status = await window.ipcRenderer.invoke('db:status')
+    dbStatus.value = `SQLite ${status.sqliteVersion} · ${status.notes} notes in DB`
+  } catch (error) {
+    dbStatus.value = `DB error: ${(error as Error).message}`
+  }
+})
 </script>
 
 <template>
@@ -19,6 +32,8 @@ import HelloWorld from './components/HelloWorld.vue'
     Place static files into the <code>/public</code> folder
     <img style="width: 2.4em; margin-left: .4em;" src="/logo.svg" alt="Logo">
   </div>
+  <!-- Tailwind demo: utilities + dark: variant -->
+  <p class="mt-8 text-sm text-slate-500 dark:text-slate-400">{{ dbStatus }}</p>
 </template>
 
 <style>
