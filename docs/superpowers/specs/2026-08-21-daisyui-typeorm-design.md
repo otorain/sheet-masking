@@ -15,12 +15,13 @@ electron-vite-vue 模板项目（Electron 42 + Vue 3 + Vite 8，pnpm 11.3.0）�
 
 ## 关键约束
 
-- 主进程经 vite-plugin-electron（esbuild）打包；**esbuild 不支持 `emitDecoratorMetadata`**，
-  也不读 `tsconfig.node.json`——esbuild 按目录向上查找的是 `tsconfig.json`。
+- 主进程经 vite-plugin-electron `notBundle()` 逐文件 esbuild 转译（依赖保持外部引用）；
+  **esbuild 不支持 `emitDecoratorMetadata`**，且按目录向上只查找 `tsconfig.json`。
   因此：
-  - `experimentalDecorators: true` 必须加到**根 `tsconfig.json`**（esbuild 才会对
-    `electron/` 下的实体类应用 legacy 装饰器语义）
-  - 所有列**显式声明 `type`**，不依赖元数据推断
+  - `experimentalDecorators: true` 加到**根 `tsconfig.json`**（esbuild 转译用），
+    `tsconfig.node.json` 同样要加（tsc/vue-tsc 类型检查用）
+  - 所有列**显式声明 `type`**（含 `@CreateDateColumn({ type: 'datetime' })`），
+    不依赖元数据推断
 - TypeORM 0.3.x 使用 legacy 装饰器，与上一条匹配
 - `better-sqlite3` 已在 dependencies 且经 postinstall 重构建，直接复用为 TypeORM 驱动
 
@@ -41,7 +42,7 @@ export class Note extends BaseEntity {
   @Column({ type: 'text' })
   content!: string
 
-  @CreateDateColumn({ name: 'created_at' })
+  @CreateDateColumn({ name: 'created_at', type: 'datetime' })
   createdAt!: Date
 }
 ```
@@ -51,9 +52,9 @@ export class Note extends BaseEntity {
 
 **`electron/main/db.ts`**（重写）
 
-- `new DataSource({ type: 'better-sqlite3', database: <userData>/global-news.db, entities: [Note], synchronize: true })`
-- 懒加载 `getDataSource()`（只 initialize 一次）；初始化后 `PRAGMA journal_mode = WAL`
-  （用 `dataSource.query` 执行，驱动无关、行为与现状一致）
+- `new DataSource({ type: 'better-sqlite3', database: <userData>/global-news.db, entities: [Note], synchronize: true, enableWAL: true })`
+  - WAL 用驱动原生选项 `enableWAL`（context7 核对的官方 API），不再手动执行 PRAGMA
+- 懒加载 `getDataSource()`（只 initialize 一次）
 - `closeDataSource()`：`destroy()`
 
 **`electron/main/index.ts`**（改）
@@ -68,7 +69,11 @@ export class Note extends BaseEntity {
 
 ### ② 配置与依赖
 
-- 根 `tsconfig.json`：`experimentalDecorators: true`（**不开** `emitDecoratorMetadata`）
+- 根 `tsconfig.json` 加 `experimentalDecorators: true`——主进程经 vite-plugin-electron
+  `notBundle()` 逐文件 esbuild 转译，esbuild 按目录向上只找 `tsconfig.json`
+- `tsconfig.node.json` 也加 `experimentalDecorators: true`——供 tsc/vue-tsc 类型检查
+  `electron/` 下的 legacy 装饰器
+- 两者均**不开** `emitDecoratorMetadata`（esbuild 不支持；所有列显式类型兜底）
 - `dependencies` 新增：`typeorm`、`reflect-metadata`（运行时打包，规则同 better-sqlite3）、
   `daisyui`（与 tailwindcss 同类别，保持现有归类）
 - `pnpm-workspace.yaml` 不动（typeorm/daisyui 无构建脚本）
@@ -93,10 +98,16 @@ DataSource 初始化失败沿 IPC 抛回渲染端，App.vue 现有 try/catch 展
 
 ### ⑤ 验证
 
+- 安装时先 `pnpm view typeorm version`：若 latest 已是 v1.x，对照官方文档复核
+  ActiveRecord API 与 better-sqlite3 驱动选项与本 spec 一致（context7 master 文档
+  仍记载 BaseEntity，预期兼容）
 - `node_modules/.bin/vue-tsc --noEmit`（含 electron 侧：必要时另跑
   `tsc --noEmit -p tsconfig.node.json`，注意 composite 约束，按实际情况调整）
-- `vite build` 构建通过（主进程 bundling 含装饰器编译）
+- `vite build` 构建通过（主进程 esbuild 转译含 legacy 装饰器）
 - 若环境有 xvfb 则 `xvfb-run` 冒烟启动 Electron；没有则以 build+typecheck 为准
+- 已知可接受行为：现有 notes 表的 `created_at` 为 `TEXT DEFAULT (datetime('now'))`，
+  与实体定义（`datetime DEFAULT CURRENT_TIMESTAMP`）有差异，首次启动时
+  `synchronize` 会重建表并保留数据（演示库可接受）
 - README：better-sqlite3 一节改写为 TypeORM（ActiveRecord、entities、DataSource、
   显式列类型原因），Tailwind 一节补 daisyUI
 
