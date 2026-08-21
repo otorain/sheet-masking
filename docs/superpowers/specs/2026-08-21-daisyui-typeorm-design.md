@@ -15,8 +15,9 @@ electron-vite-vue 模板项目（Electron 42 + Vue 3 + Vite 8，pnpm 11.3.0）�
 
 ## 关键约束
 
-- 主进程经 vite-plugin-electron `notBundle()` 逐文件 esbuild 转译（依赖保持外部引用）；
-  **esbuild 不支持 `emitDecoratorMetadata`**，且按目录向上只查找 `tsconfig.json`。
+- 主进程经 vite-plugin-electron 构建：包依赖外部化，本地模块由 Vite 8（rolldown）
+  打包进单文件 `dist-electron/main/index.js`；转译**不支持 `emitDecoratorMetadata`**，
+  且按目录向上只查找 `tsconfig.json`。
   因此：
   - `experimentalDecorators: true` 加到**根 `tsconfig.json`**（esbuild 转译用），
     `tsconfig.node.json` 同样要加（tsc/vue-tsc 类型检查用）
@@ -69,7 +70,7 @@ export class Note extends BaseEntity {
 ### ② 配置与依赖
 
 - 根 `tsconfig.json` 加 `experimentalDecorators: true`——主进程经 vite-plugin-electron
-  `notBundle()` 逐文件 esbuild 转译，esbuild 按目录向上只找 `tsconfig.json`
+  构建（Vite 8/rolldown），转译器按目录向上只找 `tsconfig.json`
 - `tsconfig.node.json` 也加 `experimentalDecorators: true`——供 tsc/vue-tsc 类型检查
   `electron/` 下的 legacy 装饰器
 - 两者均**不开** `emitDecoratorMetadata`（esbuild 不支持；所有列显式类型兜底）

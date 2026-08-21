@@ -29,4 +29,5 @@ package-lock.json
 yarn.lock
 bun.lock
 
+# TypeScript incremental build info
 *.tsbuildinfo

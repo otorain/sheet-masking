@@ -30,39 +30,54 @@ pnpm install
 pnpm run dev
 ```
 
-## Tailwind CSS (v4)
+## Tailwind CSS (v4) + daisyUI
 
 Tailwind CSS v4 is wired up through the official Vite plugin:
 
 - `tailwindcss` + `@tailwindcss/vite` are in `dependencies`
 - the plugin is registered in `vite.config.ts`
-- `src/style.css` only contains `@import "tailwindcss";` — utilities, the
-  theme and the preflight reset are generated at build time
+- `src/style.css` only contains `@import "tailwindcss";` and
+  `@plugin "daisyui";` — utilities, daisyUI components, the theme and the
+  preflight reset are generated at build time
 
 Start using utility classes directly in any Vue template, e.g.
-`class="mt-8 text-slate-500 dark:text-slate-400"`.
+`class="mt-8 text-slate-500 dark:text-slate-400"`. daisyUI adds semantic
+component classes (`btn`, `card`, `badge`, `input`, …) with light and dark
+themes out of the box — see `src/App.vue` for a demo.
 
-## better-sqlite3
+## TypeORM (better-sqlite3)
 
-`better-sqlite3` runs in the **main process only** (it is a native module and
-the renderer is sandboxed). The integration is:
+TypeORM runs in the **main process only** (its driver is a native module and
+the renderer is sandboxed). The integration uses the Active Record pattern:
 
-- `electron/main/db.ts` — lazily opens `global-news.db` in the app's
-  `userData` directory and creates a `notes` table (WAL mode)
+- `electron/main/entities/Note.ts` — the `Note` entity (`extends BaseEntity`)
+  mapped to the `notes` table. Every column declares its `type` explicitly
+  because the main process is bundled by the Vite build (vite-plugin-electron),
+  which does not support `emitDecoratorMetadata`
+- `electron/main/db.ts` — lazily initializes the `DataSource`
+  (`better-sqlite3` driver, `global-news.db` in `userData`,
+  `synchronize: true`, `enableWAL: true`) and destroys it on `will-quit`
 - `electron/main/index.ts` — exposes two IPC handlers: `db:status` and
-  `db:note:add`; the database is closed on `will-quit`
-- `src/App.vue` — renderer demo that calls `db:status` over IPC
+  `db:note:add`, implemented with Active Record calls (`Note.count()`,
+  `Note.create(...).save()`)
+- `src/App.vue` — renderer demo that calls both over IPC
 
 Notes:
 
 - better-sqlite3 v13 ships ABI-stable N-API prebuilds, so no source
   compilation is needed for Electron; `postinstall` still runs
   `electron-builder install-app-deps` to rebuild any future native modules
-  against the Electron ABI.
+  against the Electron ABI. (typeorm 1.x declares a `better-sqlite3@^12`
+  peer range; v13 is API-compatible — the peer warning is benign.)
 - pnpm 11 denies dependency build scripts unless they are explicitly allowed;
   see `allowBuilds` in `pnpm-workspace.yaml`.
-- `better-sqlite3` must stay in `dependencies` (not `devDependencies`) so
-  `electron-builder` packages it with the app.
+- `better-sqlite3` and `typeorm` must stay in `dependencies` (not
+  `devDependencies`) so `electron-builder` packages them with the app.
+  `reflect-metadata` needs no explicit entry: typeorm v1 depends on it and
+  loads it internally.
+- `experimentalDecorators: true` is set in both `tsconfig.json` (the Vite
+  build reads the nearest `tsconfig.json` when transpiling `electron/`) and
+  `tsconfig.node.json` (type checking). `emitDecoratorMetadata` stays off.
 
 ## Debug
 
