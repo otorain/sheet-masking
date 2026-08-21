@@ -24,9 +24,8 @@ release
 *.sln
 *.sw?
 
-# lockfile
+# lockfile (pnpm is the package manager; its lockfile is committed)
 package-lock.json
-pnpm-lock.yaml
-pnpm-workspace.yaml
 yarn.lock
 bun.lock
+
