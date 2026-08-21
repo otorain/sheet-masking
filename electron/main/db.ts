@@ -1,38 +1,31 @@
 import { app } from 'electron'
-import fs from 'node:fs'
 import path from 'node:path'
-import Database from 'better-sqlite3'
+import { DataSource } from 'typeorm'
+import { Note } from './entities/Note.js'
 
-type SqliteDb = InstanceType<typeof Database>
-
-let db: SqliteDb | null = null
+let dataSource: DataSource | null = null
 
 /**
- * Lazily opens (and migrates) the SQLite database stored in the app's
- * `userData` directory.
- *
- * better-sqlite3 is a native module: it is rebuilt against Electron's ABI by
- * `electron-builder install-app-deps` (see the `postinstall` script) and can
- * therefore only be loaded from the main process, never from the renderer.
+ * Lazily creates and initializes the TypeORM DataSource backed by
+ * better-sqlite3 (native module, main process only). The database file lives
+ * in the app's `userData` directory; schema is auto-synchronized (demo) and
+ * WAL mode is enabled via the driver's `enableWAL` option.
  */
-export function getDb(): SqliteDb {
-  if (!db) {
-    const dir = app.getPath('userData')
-    fs.mkdirSync(dir, { recursive: true })
-    db = new Database(path.join(dir, 'global-news.db'))
-    db.pragma('journal_mode = WAL')
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS notes (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        content    TEXT    NOT NULL,
-        created_at TEXT    NOT NULL DEFAULT (datetime('now'))
-      )
-    `)
+export async function getDataSource(): Promise<DataSource> {
+  if (!dataSource) {
+    dataSource = new DataSource({
+      type: 'better-sqlite3',
+      database: path.join(app.getPath('userData'), 'global-news.db'),
+      entities: [Note],
+      synchronize: true,
+      enableWAL: true,
+    })
+    await dataSource.initialize()
   }
-  return db
+  return dataSource
 }
 
-export function closeDb(): void {
-  db?.close()
-  db = null
+export async function closeDataSource(): Promise<void> {
+  await dataSource?.destroy()
+  dataSource = null
 }

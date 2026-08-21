@@ -3,7 +3,8 @@ import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
-import { getDb, closeDb } from './db.js'
+import { getDataSource, closeDataSource } from './db.js'
+import { Note } from './entities/Note.js'
 
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -86,31 +87,26 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// --------- better-sqlite3 demo (main process only) ---------
-// The DB is a native module and lives in the main process; the renderer talks
-// to it over IPC. See src/demos/ipc.ts / src/App.vue for the renderer side.
-ipcMain.handle('db:status', () => {
-  const db = getDb()
-  const { sqliteVersion } = db
-    .prepare('SELECT sqlite_version() AS sqliteVersion')
-    .get() as { sqliteVersion: string }
-  const { count } = db
-    .prepare('SELECT COUNT(*) AS count FROM notes')
-    .get() as { count: number }
-  return { sqliteVersion, notes: count }
+// --------- TypeORM demo (main process only) ---------
+// better-sqlite3 is a native module and lives in the main process; the
+// renderer talks to it over IPC. Active Record style: Note extends BaseEntity.
+ipcMain.handle('db:status', async () => {
+  await getDataSource()
+  const [{ sqliteVersion }] = (await Note.query(
+    'SELECT sqlite_version() AS sqliteVersion',
+  )) as { sqliteVersion: string }[]
+  const notes = await Note.count()
+  return { sqliteVersion, notes }
 })
 
-ipcMain.handle('db:note:add', (_event, content: unknown) => {
-  const db = getDb()
-  const info = db
-    .prepare('INSERT INTO notes (content) VALUES (?)')
-    .run(String(content))
-  return db
-    .prepare('SELECT * FROM notes WHERE id = ?')
-    .get(info.lastInsertRowid)
+ipcMain.handle('db:note:add', async (_event, content: unknown) => {
+  await getDataSource()
+  return Note.create({ content: String(content) }).save()
 })
 
-app.on('will-quit', () => closeDb())
+app.on('will-quit', () => {
+  void closeDataSource()
+})
 
 app.on('second-instance', () => {
   if (win) {

@@ -1,6 +1,7 @@
 {
   "compilerOptions": {
     "composite": true,
+    "experimentalDecorators": true,
     "module": "ESNext",
     "moduleResolution": "bundler",
     "moduleDetection": "force",
