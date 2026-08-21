@@ -30,6 +30,18 @@ pnpm install
 pnpm run dev
 ```
 
+## Tailwind CSS (v4)
+
+Tailwind CSS v4 is wired up through the official Vite plugin:
+
+- `tailwindcss` + `@tailwindcss/vite` are in `dependencies`
+- the plugin is registered in `vite.config.ts`
+- `src/style.css` only contains `@import "tailwindcss";` — utilities, the
+  theme and the preflight reset are generated at build time
+
+Start using utility classes directly in any Vue template, e.g.
+`class="mt-8 text-slate-500 dark:text-slate-400"`.
+
 ## Debug
 
 ![electron-vite-react-debug.gif](https://github.com/electron-vite/electron-vite-react/blob/main/electron-vite-react-debug.gif?raw=true)

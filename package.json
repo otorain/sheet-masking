@@ -30,5 +30,9 @@
     "vite-plugin-electron-renderer": "^1.0.0",
     "vue": "^3.5.35",
     "vue-tsc": "^3.3.3"
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "tailwindcss": "^4.3.3"
   }
 }

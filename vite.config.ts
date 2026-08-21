@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import tailwindcss from '@tailwindcss/vite'
 import { electronSimple } from 'vite-plugin-electron/multi-env'
 import { notBundle } from 'vite-plugin-electron/plugin'
 
@@ -15,6 +16,7 @@ export default defineConfig(({ command }) => {
   return {
     plugins: [
       vue(),
+      tailwindcss(),
       electronSimple({
         main: {
           input: 'electron/main/index.ts',
