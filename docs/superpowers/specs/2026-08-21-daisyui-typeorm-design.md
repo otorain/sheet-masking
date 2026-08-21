@@ -59,7 +59,6 @@ export class Note extends BaseEntity {
 
 **`electron/main/index.ts`**（改）
 
-- 顶部 `import 'reflect-metadata'`
 - IPC 通道与 `db:status` 返回形状**不变**：`{ sqliteVersion, notes }`
   - `sqliteVersion`：`Note.query('SELECT sqlite_version() AS sqliteVersion')`
   - `notes`：`Note.count()`
@@ -74,9 +73,13 @@ export class Note extends BaseEntity {
 - `tsconfig.node.json` 也加 `experimentalDecorators: true`——供 tsc/vue-tsc 类型检查
   `electron/` 下的 legacy 装饰器
 - 两者均**不开** `emitDecoratorMetadata`（esbuild 不支持；所有列显式类型兜底）
-- `dependencies` 新增：`typeorm`、`reflect-metadata`（运行时打包，规则同 better-sqlite3）、
+- `dependencies` 新增：`typeorm`（实际安装 1.1.0；v1 自身依赖 reflect-metadata 并在
+  `index.js` 内部 `require("reflect-metadata")`，**无需**显式依赖或手动 import）、
   `daisyui`（与 tailwindcss 同类别，保持现有归类）
-- `pnpm-workspace.yaml` 不动（typeorm/daisyui 无构建脚本）
+- `devDependencies` 新增：`@types/node`（让 `tsc --noEmit -p tsconfig.node.json`
+  可独立检查 electron 侧，此前因缺 node 类型报 TS2688）
+- `pnpm-workspace.yaml` 不动（typeorm/daisyui 无构建脚本；typeorm 的
+  `better-sqlite3@^12` peer 声明与实测 v13.0.3 兼容，peer 警告为良性，冒烟脚本验证）
 
 ### ③ daisyUI
 
@@ -98,9 +101,9 @@ DataSource 初始化失败沿 IPC 抛回渲染端，App.vue 现有 try/catch 展
 
 ### ⑤ 验证
 
-- 安装时先 `pnpm view typeorm version`：若 latest 已是 v1.x，对照官方文档复核
-  ActiveRecord API 与 better-sqlite3 驱动选项与本 spec 一致（context7 master 文档
-  仍记载 BaseEntity，预期兼容）
+- 依赖已安装并实测（2026-08-21）：typeorm 1.1.0（v1 API 已核对：BaseEntity
+  静态方法、`enableWAL`、`datetime` 列类型均存在）、daisyui 5.7.19、
+  reflect-metadata 0.2.2（typeorm 传递依赖）、@types/node 26.2.0
 - `node_modules/.bin/vue-tsc --noEmit`（含 electron 侧：必要时另跑
   `tsc --noEmit -p tsconfig.node.json`，注意 composite 约束，按实际情况调整）
 - `vite build` 构建通过（主进程 esbuild 转译含 legacy 装饰器）
