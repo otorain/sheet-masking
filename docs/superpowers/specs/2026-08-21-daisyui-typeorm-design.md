@@ -19,7 +19,7 @@ electron-vite-vue 模板项目（Electron 42 + Vue 3 + Vite 8，pnpm 11.3.0）�
   打包进单文件 `dist-electron/main/index.js`；转译**不支持 `emitDecoratorMetadata`**，
   且按目录向上只查找 `tsconfig.json`。
   因此：
-  - `experimentalDecorators: true` 加到**根 `tsconfig.json`**（esbuild 转译用），
+  - `experimentalDecorators: true` 加到**根 `tsconfig.json`**（构建转译用），
     `tsconfig.node.json` 同样要加（tsc/vue-tsc 类型检查用）
   - 所有列**显式声明 `type`**（含 `@CreateDateColumn({ type: 'datetime' })`），
     不依赖元数据推断
@@ -73,7 +73,7 @@ export class Note extends BaseEntity {
   构建（Vite 8/rolldown），转译器按目录向上只找 `tsconfig.json`
 - `tsconfig.node.json` 也加 `experimentalDecorators: true`——供 tsc/vue-tsc 类型检查
   `electron/` 下的 legacy 装饰器
-- 两者均**不开** `emitDecoratorMetadata`（esbuild 不支持；所有列显式类型兜底）
+- 两者均**不开** `emitDecoratorMetadata`（构建转译链不支持；所有列显式类型兜底）
 - `dependencies` 新增：`typeorm`（实际安装 1.1.0；v1 自身依赖 reflect-metadata 并在
   `index.js` 内部 `require("reflect-metadata")`，**无需**显式依赖或手动 import）、
   `daisyui`（与 tailwindcss 同类别，保持现有归类）
@@ -107,7 +107,7 @@ DataSource 初始化失败沿 IPC 抛回渲染端，App.vue 现有 try/catch 展
   reflect-metadata 0.2.2（typeorm 传递依赖）、@types/node 26.2.0
 - `node_modules/.bin/vue-tsc --noEmit`（含 electron 侧：必要时另跑
   `tsc --noEmit -p tsconfig.node.json`，注意 composite 约束，按实际情况调整）
-- `vite build` 构建通过（主进程 esbuild 转译含 legacy 装饰器）
+- `vite build` 构建通过（主进程转译含 legacy 装饰器）
 - 若环境有 xvfb 则 `xvfb-run` 冒烟启动 Electron；没有则以 build+typecheck 为准
 - 已知可接受行为：现有 notes 表的 `created_at` 为 `TEXT DEFAULT (datetime('now'))`，
   与实体定义（`datetime DEFAULT CURRENT_TIMESTAMP`）有差异，首次启动时
