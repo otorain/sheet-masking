@@ -6,6 +6,7 @@ import {
   encryptPayload,
   generateSalt,
   initCrypto,
+  isEncrypted,
   type CryptoContext,
 } from './crypto.js'
 import { defaultRulesConfig } from './rules.js'
@@ -69,6 +70,9 @@ function writeStored(config: StoredConfig): void {
 export function getAppState(): AppState {
   const stored = readStored()
   if (!stored) return 'setup'
+  // verifier 不是当前密文格式（如旧版 ENC1 配置）：该配置已无法用于解锁，
+  // 视为首次设置，让用户经 UI 重新设密码（setupPassword 会保留 rules）
+  if (!isEncrypted(stored.verifier)) return 'setup'
   if (ctx) return 'unlocked'
   if (stored.encPassword && safeStorage.isEncryptionAvailable()) {
     try {
@@ -100,6 +104,11 @@ export function setupPassword(password: string): void {
 export function unlockWithPassword(password: string): boolean {
   const stored = readStored()
   if (!stored) return false
+  // 防御：旧格式配置（getAppState 已将其导向 setup，正常不会走到这里；
+  // 若走到，给出可操作的错误而不是误导性的"密码错误"）
+  if (!isEncrypted(stored.verifier)) {
+    throw new Error('配置来自不兼容的旧版本，请重新设置密码')
+  }
   const candidate = initCrypto(password, stored.salt)
   try {
     const payload = decryptPayload(candidate, stored.verifier)
