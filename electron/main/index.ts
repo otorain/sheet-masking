@@ -8,6 +8,7 @@ import {
   getAppState,
   getCryptoContext,
   getRulesConfig,
+  resetPassword,
   saveRulesConfig,
   setupPassword,
   unlockWithPassword,
@@ -123,6 +124,10 @@ ipcMain.handle('app:unlock', (_event, password: unknown) => {
 
 ipcMain.handle('app:change-password', (_event, oldPassword: unknown, newPassword: unknown) => {
   if (!changePassword(String(oldPassword), String(newPassword))) throw new Error('原密码错误')
+})
+
+ipcMain.handle('app:reset-password', () => {
+  resetPassword()
 })
 
 ipcMain.handle('rules:get', () => ({ config: getRulesConfig(), builtins: BUILTIN_RULES }))

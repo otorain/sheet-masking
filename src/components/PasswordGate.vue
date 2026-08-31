@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import ResetPassword from './ResetPassword.vue'
 
 const props = defineProps<{ mode: 'setup' | 'unlock' }>()
-const emit = defineEmits<{ ready: [] }>()
+const emit = defineEmits<{ ready: []; reset: [] }>()
 
 const password = ref('')
 const confirmPassword = ref('')
@@ -65,6 +66,7 @@ async function submit() {
         <span v-if="busy" class="loading loading-spinner loading-xs" />
         {{ mode === 'setup' ? '设置并进入' : '解锁' }}
       </button>
+      <ResetPassword v-if="mode === 'unlock'" label="忘记密码？重置" @reset="emit('reset')" />
     </div>
   </div>
 </template>

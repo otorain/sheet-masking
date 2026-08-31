@@ -132,6 +132,18 @@ export function changePassword(oldPassword: string, newPassword: string): boolea
   return true
 }
 
+/**
+ * 重置密码（锁死逃生通道）：清空密码字段与内存派生密钥，保留自定义规则。
+ * 缺 verifier 的配置会被 getAppState 视为 setup → 用户重新设置密码。
+ * 旧密码脱敏的所有文件无法再还原（UI 已先行警告确认）。
+ */
+export function resetPassword(): void {
+  ctx = null
+  const stored = readStored()
+  if (!stored) return
+  writeStored({ salt: '', encPassword: '', verifier: '', rules: stored.rules })
+}
+
 export function getCryptoContext(): CryptoContext {
   if (!ctx) throw new Error('未解锁：请先设置或输入主密码')
   return ctx

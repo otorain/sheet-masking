@@ -42,9 +42,9 @@ onMounted(async () => {
       </div>
       <div v-if="errorMsg" class="alert alert-error mb-4">{{ errorMsg }}</div>
       <PasswordGate v-if="view === 'gate-setup'" mode="setup" @ready="view = 'main'" />
-      <PasswordGate v-else-if="view === 'gate-unlock'" mode="unlock" @ready="view = 'main'" />
+      <PasswordGate v-else-if="view === 'gate-unlock'" mode="unlock" @ready="view = 'main'" @reset="view = 'gate-setup'" />
       <MainFlow v-else-if="view === 'main'" />
-      <SettingsView v-else-if="view === 'settings'" />
+      <SettingsView v-else-if="view === 'settings'" @reset="view = 'gate-setup'" />
       <div v-else class="flex justify-center p-12">
         <span class="loading loading-spinner loading-lg" />
       </div>

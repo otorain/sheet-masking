@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
 import { deepUnwrap } from '../lib/serialize'
+import ResetPassword from './ResetPassword.vue'
 import type { BuiltinRule, RulesConfig } from '../../electron/shared/types'
+
+const emit = defineEmits<{ reset: [] }>()
 
 const builtins = ref<BuiltinRule[]>([])
 const enabled = reactive<Record<string, boolean>>({})
@@ -151,7 +154,10 @@ async function submitChangePassword() {
         <input v-model="oldPassword" type="password" class="input input-bordered input-sm w-full" placeholder="原密码">
         <input v-model="newPassword" type="password" class="input input-bordered input-sm w-full" placeholder="新密码">
         <input v-model="newPassword2" type="password" class="input input-bordered input-sm w-full" placeholder="确认新密码">
-        <button class="btn btn-warning btn-sm self-end" @click="submitChangePassword">修改密码</button>
+        <div class="flex items-center justify-between">
+          <button class="btn btn-warning btn-sm" @click="submitChangePassword">修改密码</button>
+          <ResetPassword label="忘记原密码？重置" @reset="emit('reset')" />
+        </div>
       </div>
     </div>
   </div>
