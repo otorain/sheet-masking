@@ -1782,9 +1782,12 @@ export async function detectCsvEncoding(filePath: string): Promise<'utf8' | 'gbk
   }
 }
 
-function openTextStream(filePath: string, encoding: 'utf8' | 'gbk'): NodeJS.ReadableStream {
+function openTextStream(
+  filePath: string,
+  encoding: 'utf8' | 'gbk',
+): { raw: fs.ReadStream; text: NodeJS.ReadableStream } {
   const raw = fs.createReadStream(filePath)
-  return encoding === 'gbk' ? raw.pipe(iconv.decodeStream('gbk')) : raw
+  return { raw, text: encoding === 'gbk' ? raw.pipe(iconv.decodeStream('gbk')) : raw }
 }
 
 /** 流式读前 maxRows 行（行 = string[]，0-based 列） */
@@ -1795,12 +1798,16 @@ export async function readCsvHead(
 ): Promise<string[][]> {
   return new Promise((resolve, reject) => {
     const rows: string[][] = []
-    const parser = openTextStream(filePath, encoding).pipe(parse({ headers: false }))
+    const { raw, text } = openTextStream(filePath, encoding)
+    const parser = text.pipe(parse({ headers: false }))
+    raw.on('error', reject) // pipe 不转发错误，上游读失败也要 reject
     parser.on('error', reject)
     parser.on('data', (row: unknown) => {
       rows.push((row as unknown[]).map(String))
       if (rows.length >= maxRows) {
         parser.removeAllListeners('data')
+        parser.unpipe() // 先断流再销毁，避免上游继续写入已销毁的 parser
+        raw.destroy()
         parser.destroy()
         resolve(rows)
       }
@@ -1836,12 +1843,17 @@ export async function processCsv(
   const encoding = await detectCsvEncoding(filePath)
   const fileSize = Math.max(1, (await fs.promises.stat(filePath)).size)
   const raw = fs.createReadStream(filePath)
-  const text = encoding === 'gbk' ? raw.pipe(iconv.decodeStream('gbk')) : raw
+  // iconv.decodeStream 类型仅声明 NodeJS.ReadWriteStream（无 destroy），实际即 Transform
+  type DestroyableReadable = NodeJS.ReadableStream & { destroy(): void }
+  const text = (
+    encoding === 'gbk' ? raw.pipe(iconv.decodeStream('gbk')) : raw
+  ) as DestroyableReadable
   const parser = text.pipe(parse({ headers: false }))
   const out = fs.createWriteStream(outPath)
   out.write('\uFEFF') // BOM
+  // fast-csv 只在行间写 rowDelimiter，末行无行尾；end:false 保留 out 以便补末行 CRLF
   const writer = format({ rowDelimiter: '\r\n' })
-  writer.pipe(out)
+  writer.pipe(out, { end: false })
 
   let processedCells = 0
   const failedCells: string[] = []
@@ -1849,55 +1861,95 @@ export async function processCsv(
   let firstEncSeen = false
   const selectedCols = new Set(selection?.cols ?? [])
 
-  const abort = (message: string): never => {
+  // pipe 不转发 error：四条源流 + writer 任一报错都汇入 streamFailure 并销毁全部流，
+  // 否则主进程 uncaughtException（崩溃）或 for await/finished 永久悬挂。
+  let streamFailure: Error | null = null
+  let tearingDown = false
+  const destroyAll = (): void => {
+    tearingDown = true
+    parser.unpipe()
+    raw.destroy()
+    if (text !== (raw as NodeJS.ReadableStream)) text.destroy()
     parser.destroy()
-    writer.end()
+    writer.unpipe()
+    writer.destroy()
     out.destroy()
+  }
+  const onStreamError = (err: Error): void => {
+    // 开始销毁后到达的都是次生错误（如 out 在途写完成后触发的 write-after-destroy），不再上抛
+    if (tearingDown) return
+    streamFailure = err
+    destroyAll()
+  }
+  raw.on('error', onStreamError)
+  if (text !== (raw as NodeJS.ReadableStream)) text.on('error', onStreamError)
+  parser.on('error', onStreamError)
+  writer.on('error', onStreamError)
+  out.on('error', onStreamError)
+  // writer 被销毁后 drain 不再触发，用共享 close 兜底避免背压等待挂死
+  const writerClosed = once(writer, 'close').catch(() => {})
+
+  // 密码错误等主动中止：销毁全部流，统一走 catch 删半成品
+  const abort = (message: string): never => {
+    destroyAll()
     throw new Error(message)
   }
 
-  for await (const row of parser) {
-    rowNo++
-    const cells = (row as unknown[]).map(String)
-    if (rowNo === 1) stripBom(cells)
-    if (mode === 'encrypt' && selection && rowNo === selection.headerRow) {
-      // 加密跳过表头行（与 xlsx 路径一致），照原样写出
-    } else {
-      for (let c = 0; c < cells.length; c++) {
-        if (mode === 'encrypt') {
-          if (!selectedCols.has(c + 1)) continue
-          const value = cells[c]
-          if (value === '' || isEncrypted(value)) continue // 空值/已加密跳过
-          cells[c] = encryptPayload(ctx, ['s', value])
-          processedCells++
-        } else {
-          if (!isEncrypted(cells[c])) continue
-          const isFirst = !firstEncSeen
-          firstEncSeen = true
-          try {
-            const payload = decryptPayload(ctx, cells[c])
-            cells[c] = String(payload[1]) // CSV 一律还原为文本（xlsx 的 n/d 类型不在此出现）
+  try {
+    for await (const row of parser) {
+      rowNo++
+      const cells = (row as unknown[]).map(String)
+      if (rowNo === 1) stripBom(cells)
+      if (mode === 'encrypt' && selection && rowNo === selection.headerRow) {
+        // 加密跳过表头行（与 xlsx 路径一致），照原样写出
+      } else {
+        for (let c = 0; c < cells.length; c++) {
+          if (mode === 'encrypt') {
+            if (!selectedCols.has(c + 1)) continue
+            const value = cells[c]
+            if (value === '' || isEncrypted(value)) continue // 空值/已加密跳过
+            cells[c] = encryptPayload(ctx, ['s', value])
             processedCells++
-          } catch {
-            if (isFirst) abort('密码不符或文件被篡改')
-            failedCells.push(`行${rowNo}列${c + 1}`)
+          } else {
+            if (!isEncrypted(cells[c])) continue
+            const isFirst = !firstEncSeen
+            firstEncSeen = true
+            try {
+              const payload = decryptPayload(ctx, cells[c])
+              cells[c] = String(payload[1]) // CSV 一律还原为文本（xlsx 的 n/d 类型不在此出现）
+              processedCells++
+            } catch {
+              if (isFirst) abort('密码不符或文件被篡改')
+              failedCells.push(`行${rowNo}列${c + 1}`)
+            }
           }
         }
       }
+      if (!writer.write(cells)) await Promise.race([once(writer, 'drain'), writerClosed])
+      if (rowNo % YIELD_EVERY_ROWS === 0) {
+        onProgress(Math.min(99, Math.round((raw.bytesRead / fileSize) * 100)))
+      }
     }
-    if (!writer.write(cells)) await once(writer, 'drain')
-    if (rowNo % YIELD_EVERY_ROWS === 0) {
-      onProgress(Math.min(99, Math.round((raw.bytesRead / fileSize) * 100)))
-    }
+    if (streamFailure) throw streamFailure // 循环被 destroyAll 提前终止：上抛真实原因
+    writer.end()
+    await finished(writer) // 等 writer 把末行冲进 out 后再补末行 CRLF
+    if (rowNo > 0) out.write('\r\n')
+    out.end()
+    await finished(out)
+  } catch (err) {
+    destroyAll()
+    // 等 out 真正关闭（fd 未关时删文件在 Windows 会 EPERM），再删半成品输出
+    if (!out.closed) await once(out, 'close').catch(() => {})
+    fs.rmSync(outPath, { force: true })
+    // 优先上抛源流的真实错误（destroyAll 衍生的 Premature close 会掩盖根因）
+    throw streamFailure ?? err
   }
-  writer.end()
-  await finished(out)
   onProgress(100)
   return { processedCells, skippedFormulas: 0, failedCells, outPath }
 }
 ```
 
-注：BOM 一律用显式转义 `'\uFEFF'`（代码与测试中均已如此），不要依赖字面不可见字符。
+注：BOM 一律用显式转义 `'\uFEFF'`（代码与测试中均已如此），不要依赖字面不可见字符。fast-csv 只在行间写 rowDelimiter、末行无行尾，故 `writer.pipe(out, { end: false })` + `await finished(writer)` 后手工补写末行 CRLF 再 `out.end()`。错误处理：pipe 不转发 error，故四条源流 + writer 统一挂监听汇入 `streamFailure` 并 `destroyAll()`（`tearingDown` 吞掉销毁衍生的 write-after-destroy 次生错误）；整个处理体包 try/catch，任何失败（含 abort）销毁全部流、等 out 关闭后删除半成品输出，并优先上抛 `streamFailure` 根因——否则 Electron 主进程 uncaughtException 崩溃或 promise 永久悬挂。
 
 - [ ] **Step 4: 跑测试确认通过**
 

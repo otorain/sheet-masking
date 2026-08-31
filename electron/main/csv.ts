@@ -113,7 +113,11 @@ export async function processCsv(
   const encoding = await detectCsvEncoding(filePath)
   const fileSize = Math.max(1, (await fs.promises.stat(filePath)).size)
   const raw = fs.createReadStream(filePath)
-  const text = encoding === 'gbk' ? raw.pipe(iconv.decodeStream('gbk')) : raw
+  // iconv.decodeStream 类型仅声明 NodeJS.ReadWriteStream（无 destroy），实际即 Transform
+  type DestroyableReadable = NodeJS.ReadableStream & { destroy(): void }
+  const text = (
+    encoding === 'gbk' ? raw.pipe(iconv.decodeStream('gbk')) : raw
+  ) as DestroyableReadable
   const parser = text.pipe(parse({ headers: false }))
   const out = fs.createWriteStream(outPath)
   out.write('\uFEFF') // BOM
@@ -127,56 +131,89 @@ export async function processCsv(
   let firstEncSeen = false
   const selectedCols = new Set(selection?.cols ?? [])
 
-  const abort = (message: string): never => {
+  // pipe 不转发 error：四条源流 + writer 任一报错都汇入 streamFailure 并销毁全部流，
+  // 否则主进程 uncaughtException（崩溃）或 for await/finished 永久悬挂。
+  let streamFailure: Error | null = null
+  let tearingDown = false
+  const destroyAll = (): void => {
+    tearingDown = true
     parser.unpipe()
     raw.destroy()
+    if (text !== (raw as NodeJS.ReadableStream)) text.destroy()
     parser.destroy()
     writer.unpipe()
     writer.destroy()
-    out.on('error', () => {}) // 中止路径：主错误已抛出，out 销毁衍生的 write 错误不再上抛
     out.destroy()
+  }
+  const onStreamError = (err: Error): void => {
+    // 开始销毁后到达的都是次生错误（如 out 在途写完成后触发的 write-after-destroy），不再上抛
+    if (tearingDown) return
+    streamFailure = err
+    destroyAll()
+  }
+  raw.on('error', onStreamError)
+  if (text !== (raw as NodeJS.ReadableStream)) text.on('error', onStreamError)
+  parser.on('error', onStreamError)
+  writer.on('error', onStreamError)
+  out.on('error', onStreamError)
+  // writer 被销毁后 drain 不再触发，用共享 close 兜底避免背压等待挂死
+  const writerClosed = once(writer, 'close').catch(() => {})
+
+  // 密码错误等主动中止：销毁全部流，统一走 catch 删半成品
+  const abort = (message: string): never => {
+    destroyAll()
     throw new Error(message)
   }
 
-  for await (const row of parser) {
-    rowNo++
-    const cells = (row as unknown[]).map(String)
-    if (rowNo === 1) stripBom(cells)
-    if (mode === 'encrypt' && selection && rowNo === selection.headerRow) {
-      // 加密跳过表头行（与 xlsx 路径一致），照原样写出
-    } else {
-      for (let c = 0; c < cells.length; c++) {
-        if (mode === 'encrypt') {
-          if (!selectedCols.has(c + 1)) continue
-          const value = cells[c]
-          if (value === '' || isEncrypted(value)) continue // 空值/已加密跳过
-          cells[c] = encryptPayload(ctx, ['s', value])
-          processedCells++
-        } else {
-          if (!isEncrypted(cells[c])) continue
-          const isFirst = !firstEncSeen
-          firstEncSeen = true
-          try {
-            const payload = decryptPayload(ctx, cells[c])
-            cells[c] = String(payload[1]) // CSV 一律还原为文本（xlsx 的 n/d 类型不在此出现）
+  try {
+    for await (const row of parser) {
+      rowNo++
+      const cells = (row as unknown[]).map(String)
+      if (rowNo === 1) stripBom(cells)
+      if (mode === 'encrypt' && selection && rowNo === selection.headerRow) {
+        // 加密跳过表头行（与 xlsx 路径一致），照原样写出
+      } else {
+        for (let c = 0; c < cells.length; c++) {
+          if (mode === 'encrypt') {
+            if (!selectedCols.has(c + 1)) continue
+            const value = cells[c]
+            if (value === '' || isEncrypted(value)) continue // 空值/已加密跳过
+            cells[c] = encryptPayload(ctx, ['s', value])
             processedCells++
-          } catch {
-            if (isFirst) abort('密码不符或文件被篡改')
-            failedCells.push(`行${rowNo}列${c + 1}`)
+          } else {
+            if (!isEncrypted(cells[c])) continue
+            const isFirst = !firstEncSeen
+            firstEncSeen = true
+            try {
+              const payload = decryptPayload(ctx, cells[c])
+              cells[c] = String(payload[1]) // CSV 一律还原为文本（xlsx 的 n/d 类型不在此出现）
+              processedCells++
+            } catch {
+              if (isFirst) abort('密码不符或文件被篡改')
+              failedCells.push(`行${rowNo}列${c + 1}`)
+            }
           }
         }
       }
+      if (!writer.write(cells)) await Promise.race([once(writer, 'drain'), writerClosed])
+      if (rowNo % YIELD_EVERY_ROWS === 0) {
+        onProgress(Math.min(99, Math.round((raw.bytesRead / fileSize) * 100)))
+      }
     }
-    if (!writer.write(cells)) await once(writer, 'drain')
-    if (rowNo % YIELD_EVERY_ROWS === 0) {
-      onProgress(Math.min(99, Math.round((raw.bytesRead / fileSize) * 100)))
-    }
+    if (streamFailure) throw streamFailure // 循环被 destroyAll 提前终止：上抛真实原因
+    writer.end()
+    await finished(writer) // 等 writer 把末行冲进 out 后再补末行 CRLF
+    if (rowNo > 0) out.write('\r\n')
+    out.end()
+    await finished(out)
+  } catch (err) {
+    destroyAll()
+    // 等 out 真正关闭（fd 未关时删文件在 Windows 会 EPERM），再删半成品输出
+    if (!out.closed) await once(out, 'close').catch(() => {})
+    fs.rmSync(outPath, { force: true })
+    // 优先上抛源流的真实错误（destroyAll 衍生的 Premature close 会掩盖根因）
+    throw streamFailure ?? err
   }
-  writer.end()
-  await finished(writer) // 等 writer 把末行冲进 out 后再补末行 CRLF
-  if (rowNo > 0) out.write('\r\n')
-  out.end()
-  await finished(out)
   onProgress(100)
   return { processedCells, skippedFormulas: 0, failedCells, outPath }
 }

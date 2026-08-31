@@ -125,4 +125,51 @@ describe('processCsv 加密→还原往返', () => {
       processCsv(enc, 'decrypt', undefined, path.join(dir, 'wrongpw-dec.csv'), wrong, () => {}),
     ).rejects.toThrow('密码不符或文件被篡改')
   })
+
+  it('输出目录不存在：rejects（不悬挂）且不留半成品', async () => {
+    const src = path.join(dir, 'noout.csv')
+    fs.writeFileSync(src, UTF8_CSV, 'utf8')
+    const bad = path.join(dir, 'no-such-dir', 'out.csv')
+    // rejects 断言本身即证明 promise 已 settle（悬挂则超时失败）
+    await expect(
+      processCsv(src, 'encrypt', { headerRow: 1, cols: [2] }, bad, ctx, () => {}),
+    ).rejects.toThrow(/ENOENT|no such file/i)
+    expect(fs.existsSync(bad)).toBe(false)
+  })
+
+  it('密码错误 abort：半成品输出文件被删除', async () => {
+    const src = path.join(dir, 'abort.csv')
+    fs.writeFileSync(src, UTF8_CSV, 'utf8')
+    const enc = path.join(dir, 'abort-enc.csv')
+    await processCsv(src, 'encrypt', { headerRow: 1, cols: [2] }, enc, ctx, () => {})
+    const wrong = initCrypto('other-password', generateSalt())
+    const dec = path.join(dir, 'abort-dec.csv')
+    await expect(
+      processCsv(enc, 'decrypt', undefined, dec, wrong, () => {}),
+    ).rejects.toThrow('密码不符或文件被篡改')
+    expect(fs.existsSync(dec)).toBe(false)
+  })
+
+  it('第二档失败：篡改非首个 ENC1 格 → 记录地址继续，其余格正常还原', async () => {
+    const src = path.join(dir, 'tamper.csv')
+    fs.writeFileSync(src, UTF8_CSV, 'utf8')
+    const enc = path.join(dir, 'tamper-enc.csv')
+    await processCsv(src, 'encrypt', { headerRow: 1, cols: [2] }, enc, ctx, () => {})
+    // 篡改第 3 行第 2 列（非首个 ENC1 格）：翻转密文区一个字符，保留 ENC1: 前缀
+    const lines = fs.readFileSync(enc, 'utf8').split('\r\n')
+    const cells = lines[2].split(',')
+    const mid = 10 // 'ENC1:'.length + 5，落在 base64 密文区
+    cells[1] = cells[1].slice(0, mid) + (cells[1][mid] === 'A' ? 'B' : 'A') + cells[1].slice(mid + 1)
+    lines[2] = cells.join(',')
+    const tampered = path.join(dir, 'tampered.csv')
+    fs.writeFileSync(tampered, lines.join('\r\n'), 'utf8')
+
+    const dec = path.join(dir, 'tamper-dec.csv')
+    const summary = await processCsv(tampered, 'decrypt', undefined, dec, ctx, () => {})
+    expect(summary.failedCells).toEqual(['行3列2'])
+    expect(summary.processedCells).toBe(1)
+    const decLines = fs.readFileSync(dec, 'utf8').slice(1).split('\r\n')
+    expect(decLines[1]).toBe('A001,张三,13800138000') // 首个 ENC1 格正常还原
+    expect(isEncrypted(decLines[2].split(',')[1])).toBe(true) // 篡改格原样保留
+  })
 })

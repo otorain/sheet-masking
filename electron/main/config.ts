@@ -43,16 +43,27 @@ function configPath(): string {
 }
 
 function readStored(): StoredConfig | null {
+  const file = configPath()
+  if (!fs.existsSync(file)) return null // 仅「不存在」视为未初始化
+  let parsed: StoredConfig
   try {
-    return JSON.parse(fs.readFileSync(configPath(), 'utf8')) as StoredConfig
+    parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as StoredConfig
   } catch {
-    return null
+    // 损坏 ≠ 未初始化：不得静默回退 setup（会导致覆盖丢密），调用方自然传播
+    throw new Error(
+      '配置文件损坏（config.json 无法解析）。请先备份该文件（其中 verifier 可用于恢复原密码），再删除并重新设置密码',
+    )
   }
+  return parsed
 }
 
 function writeStored(config: StoredConfig): void {
-  fs.mkdirSync(path.dirname(configPath()), { recursive: true })
-  fs.writeFileSync(configPath(), JSON.stringify(config, null, 2), 'utf8')
+  const file = configPath()
+  fs.mkdirSync(path.dirname(file), { recursive: true })
+  // 临时文件 + rename 原子写，避免中途断电/崩溃留下半个 JSON
+  const tmp = `${file}.tmp`
+  fs.writeFileSync(tmp, JSON.stringify(config, null, 2), 'utf8')
+  fs.renameSync(tmp, file)
 }
 
 export function getAppState(): AppState {

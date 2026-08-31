@@ -1,8 +1,8 @@
 {
   "$schema": "./node_modules/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "com.sheetmasking.app",
   "asar": true,
-  "productName": "YourAppName",
+  "productName": "sheet-masking",
   "directories": {
     "output": "release/${version}"
   },
