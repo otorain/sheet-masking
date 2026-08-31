@@ -1,10 +1,12 @@
-import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import os from 'node:os'
-import { getDataSource, closeDataSource } from './db.js'
-import { Note } from './entities/Note.js'
+
+// ExcelJS 全量加载整个工作簿为对象图（50 万行 × 15 列 ≈ 4-8GB 堆），
+// 32GB 机器直接把主进程堆上限提到 12GB。必须在 app ready 之前调用。
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=12288')
 
 const require = createRequire(import.meta.url)
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -46,16 +48,13 @@ const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
 async function createWindow() {
   win = new BrowserWindow({
-    title: 'Main window',
+    title: '报表脱敏工具',
     icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
     webPreferences: {
       preload,
-      // Warning: Enable nodeIntegration and disable contextIsolation is not secure in production
-      // nodeIntegration: true,
-
-      // Consider using contextBridge.exposeInMainWorld
-      // Read more on https://www.electronjs.org/docs/latest/tutorial/context-isolation
-      // contextIsolation: false,
+      // 渲染进程保持 sandbox：无 nodeIntegration、contextIsolation 开启。
+      // 一切文件/加密操作都在主进程，经 contextBridge 暴露的
+      // window.ipcRenderer.invoke 通信。
     },
   })
 
@@ -67,17 +66,11 @@ async function createWindow() {
     win.loadFile(indexHtml)
   }
 
-  // Test actively push message to the Electron-Renderer
-  win.webContents.on('did-finish-load', () => {
-    win?.webContents.send('main-process-message', new Date().toLocaleString())
-  })
-
   // Make all links open with the browser, not with the application
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https:')) shell.openExternal(url)
     return { action: 'deny' }
   })
-  // win.webContents.on('will-navigate', (event, url) => { }) #344
 }
 
 app.whenReady().then(createWindow)
@@ -85,27 +78,6 @@ app.whenReady().then(createWindow)
 app.on('window-all-closed', () => {
   win = null
   if (process.platform !== 'darwin') app.quit()
-})
-
-// --------- TypeORM demo (main process only) ---------
-// better-sqlite3 is a native module and lives in the main process; the
-// renderer talks to it over IPC. Active Record style: Note extends BaseEntity.
-ipcMain.handle('db:status', async () => {
-  await getDataSource()
-  const [{ sqliteVersion }] = (await Note.query(
-    'SELECT sqlite_version() AS sqliteVersion',
-  )) as { sqliteVersion: string }[]
-  const notes = await Note.count()
-  return { sqliteVersion, notes }
-})
-
-ipcMain.handle('db:note:add', async (_event, content: unknown) => {
-  await getDataSource()
-  return Note.create({ content: String(content) }).save()
-})
-
-app.on('will-quit', () => {
-  void closeDataSource()
 })
 
 app.on('second-instance', () => {
@@ -125,19 +97,4 @@ app.on('activate', () => {
   }
 })
 
-// New window example arg: new windows url
-ipcMain.handle('open-win', (_, arg) => {
-  const childWindow = new BrowserWindow({
-    webPreferences: {
-      preload,
-      nodeIntegration: true,
-      contextIsolation: false,
-    },
-  })
-
-  if (VITE_DEV_SERVER_URL) {
-    childWindow.loadURL(`${VITE_DEV_SERVER_URL}#${arg}`)
-  } else {
-    childWindow.loadFile(indexHtml, { hash: arg })
-  }
-})
+// IPC handlers 见 Task 7。

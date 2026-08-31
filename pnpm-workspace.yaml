@@ -2,9 +2,6 @@
 
 # pnpm 11 denies dependency build scripts unless explicitly allowed here
 # (this replaced the old `onlyBuiltDependencies` list):
-# - better-sqlite3: native module; rebuilt for Electron by `electron-builder
-#   install-app-deps` (see the `postinstall` script)
 # - electron-winstaller: only needed to build Windows installers; not needed here
 allowBuilds:
-  better-sqlite3: true
   electron-winstaller: false

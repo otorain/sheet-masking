@@ -19,10 +19,10 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build && electron-builder",
     "preview": "vite preview",
+    "test": "vitest run",
     "postinstall": "electron-builder install-app-deps"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^26.2.0",
     "@vitejs/plugin-vue": "^6.0.7",
     "electron": "^42.1.0",
@@ -31,14 +31,16 @@
     "vite": "^8.0.16",
     "vite-plugin-electron": "^1.0.1",
     "vite-plugin-electron-renderer": "^1.0.0",
+    "vitest": "^4.1.11",
     "vue": "^3.5.35",
     "vue-tsc": "^3.3.3"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
-    "better-sqlite3": "^13.0.3",
     "daisyui": "^5.7.19",
-    "tailwindcss": "^4.3.3",
-    "typeorm": "^1.1.0"
+    "exceljs": "^4.4.0",
+    "fast-csv": "^5.0.7",
+    "iconv-lite": "^0.7.3",
+    "tailwindcss": "^4.3.3"
   }
 }
