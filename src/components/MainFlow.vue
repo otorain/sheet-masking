@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { deepUnwrap } from '../lib/serialize'
 import type {
   AnalyzeResult,
   ProcessMode,
@@ -93,7 +94,8 @@ async function run(mode: ProcessMode) {
     const result = (await window.ipcRenderer.invoke('file:process', {
       filePath: analysis.value.filePath,
       mode,
-      selections: selections.value,
+      // selections.value 是 reactive Proxy，contextBridge 无法克隆，需深解包
+      selections: deepUnwrap(selections.value),
     })) as ProcessSummary | null
     if (result) summary.value = result // null = 用户取消了保存对话框
   } catch (err) {

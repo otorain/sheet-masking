@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { deepUnwrap } from '../lib/serialize'
 import type { BuiltinRule, RulesConfig } from '../../electron/shared/types'
 
 const builtins = ref<BuiltinRule[]>([])
@@ -54,11 +55,11 @@ async function saveRules() {
   errorMsg.value = ''
   okMsg.value = ''
   try {
-    const config: RulesConfig = {
+    const config: RulesConfig = deepUnwrap({
       disabledBuiltins: builtins.value.filter((b) => !enabled[b.id]).map((b) => b.id),
       customKeywords: customKeywords.value,
       customPatterns: customPatterns.value,
-    }
+    })
     await window.ipcRenderer.invoke('rules:save', config)
     okMsg.value = '规则已保存'
   } catch (err) {
