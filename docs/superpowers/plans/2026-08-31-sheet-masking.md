@@ -1361,16 +1361,19 @@ export async function processFile(
 }
 
 /**
- * 表头行自动探测：前 5 行中取「非空单元格最多且下一行有数据」的行；
- * 非空数相同取靠前的行；末行无下一行也允许参选。返回 1-based 行号。
+ * 表头行自动探测：前 5 行中取「文本单元格（非空且非纯数字）最多且下一行有数据」的行；
+ * 计数相同取靠前的行；末行无下一行也允许参选。返回 1-based 行号。
+ * （2026-08-31 实现期修正：spec 原文「非空单元格最多」会把全填满的数据行误判为表头，
+ *  经用户确认采用「非空且非纯数字」口径。局限：数据行文本多于表头时仍会误判，UI 可手动修正。）
  */
 export function detectHeaderRow(denseRows: string[][]): number {
+  const isText = (v: string): boolean => v !== '' && !Number.isFinite(Number(v))
   let best = 0
   let bestCount = -1
   const limit = Math.min(denseRows.length, HEADER_CANDIDATE_ROWS)
   for (let i = 0; i < limit; i++) {
     if (i + 1 < denseRows.length && !denseRows[i + 1].some((v) => v !== '')) continue
-    const count = denseRows[i].filter((v) => v !== '').length
+    const count = denseRows[i].filter(isText).length
     if (count > bestCount) {
       bestCount = count
       best = i
@@ -1515,7 +1518,9 @@ export async function processXlsx(
           }
           const value = cell.value
           if (isEncrypted(value)) continue // 防重复加密
-          const payload = valueToPayload(value) // 空/合并/富文本/超链接/布尔/错误 → null 跳过
+          // 合并从格与主格共享存储（实测赋值从格会连带改主格），整格跳过
+          if (cell.type === ExcelJS.ValueType.Merge) continue
+          const payload = valueToPayload(value) // 空/富文本/超链接/布尔/错误 → null 跳过
           if (payload === null) continue
           cell.value = encryptPayload(ctx, payload)
           processedCells++
