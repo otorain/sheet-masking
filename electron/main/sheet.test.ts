@@ -104,6 +104,28 @@ describe('analyzeXlsx', () => {
     expect(sheets[0].headerRow).toBe(1)
     expect(sheets[0].headers.map((h) => h.name)).toEqual(['订单报表（导出）'])
   })
+
+  it('多 sheet 提前中断：首个 sheet 超 55 行提前 break 后，后续 sheet 照常完整分析', async () => {
+    const file = path.join(dir, 'early-break.xlsx')
+    const wb = new ExcelJS.Workbook()
+    const ws1 = wb.addWorksheet('长表')
+    ws1.addRow(['工号', '姓名', '入职日期'])
+    for (let i = 1; i <= 100; i++) ws1.addRow([`E${i}`, `员工${i}`, '2026-01-01'])
+    const ws2 = wb.addWorksheet('卡片')
+    ws2.addRow(['卡号', '持有人'])
+    ws2.addRow(['6222020200112233', '张三'])
+    await wb.xlsx.writeFile(file)
+
+    const sheets = await analyzeXlsx(file, rules)
+    expect(sheets.map((s) => s.name)).toEqual(['长表', '卡片'])
+    expect(sheets[0].headerRow).toBe(1)
+    expect(sheets[0].headers.map((h) => h.name)).toEqual(['工号', '姓名', '入职日期'])
+    const byName1 = Object.fromEntries(sheets[0].headers.map((h) => [h.name, h]))
+    expect(byName1['姓名'].autoSelected).toBe(true)
+    const byName2 = Object.fromEntries(sheets[1].headers.map((h) => [h.name, h]))
+    expect(byName2['卡号'].autoSelected).toBe(true)
+    expect(byName2['卡号'].matchedRules.length).toBeGreaterThan(0)
+  })
 })
 
 describe('processXlsx 加密→还原往返', () => {
