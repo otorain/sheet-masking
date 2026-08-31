@@ -62,7 +62,7 @@ const indexHtml = path.join(RENDERER_DIST, 'index.html')
 async function createWindow() {
   win = new BrowserWindow({
     title: '报表脱敏工具',
-    icon: path.join(process.env.VITE_PUBLIC, 'favicon.ico'),
+    icon: path.join(process.env.VITE_PUBLIC, process.platform === 'linux' ? 'logo.png' : 'favicon.ico'),
     webPreferences: {
       preload,
       // 渲染进程保持 sandbox：无 nodeIntegration、contextIsolation 开启。
