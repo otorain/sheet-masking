@@ -155,10 +155,10 @@ describe('processCsv 加密→还原往返', () => {
     fs.writeFileSync(src, UTF8_CSV, 'utf8')
     const enc = path.join(dir, 'tamper-enc.csv')
     await processCsv(src, 'encrypt', { headerRow: 1, cols: [2] }, enc, ctx, () => {})
-    // 篡改第 3 行第 2 列（非首个 ENC1 格）：翻转密文区一个字符，保留 ENC1: 前缀
+    // 篡改第 3 行第 2 列（非首个 E2 格）：翻转密文区一个字符，保留前缀
     const lines = fs.readFileSync(enc, 'utf8').split('\r\n')
     const cells = lines[2].split(',')
-    const mid = 10 // 'ENC1:'.length + 5，落在 base64 密文区
+    const mid = cells[1].indexOf(':') + 6 // 前缀之后落入 base64 密文区
     cells[1] = cells[1].slice(0, mid) + (cells[1][mid] === 'A' ? 'B' : 'A') + cells[1].slice(mid + 1)
     lines[2] = cells.join(',')
     const tampered = path.join(dir, 'tampered.csv')

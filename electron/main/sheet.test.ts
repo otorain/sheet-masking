@@ -211,9 +211,10 @@ describe('processXlsx 加密→还原往返', () => {
     await wb.xlsx.readFile(enc)
     const ws = wb.getWorksheet('订单')!
     const encText = ws.getCell('C3').value as string
-    const buf = Buffer.from(encText.slice('ENC1:'.length), 'base64')
+    const prefix = encText.slice(0, encText.indexOf(':') + 1)
+    const buf = Buffer.from(encText.slice(prefix.length), 'base64')
     buf[buf.length - 1] ^= 1
-    ws.getCell('C3').value = 'ENC1:' + buf.toString('base64')
+    ws.getCell('C3').value = prefix + buf.toString('base64')
     const tampered = path.join(dir, 'partial-tampered.xlsx')
     await wb.xlsx.writeFile(tampered)
 

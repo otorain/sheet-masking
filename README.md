@@ -18,12 +18,13 @@ Vite 8 + Tailwind v4/daisyUI）。
 ## 加密格式
 
 - 主密钥：`scrypt(password, salt)`，HKDF-SHA256 分出加密钥与 IV 钥
-- 单元格：值序列化为带类型 JSON（`["s",文本]` / `["n",数字]` / `["d",ISO日期]`），
-  `iv = HMAC-SHA256(sivKey, payload)[0:12]`，AES-256-GCM 加密，写回
-  `'ENC1:' + base64(iv ‖ 密文 ‖ tag)`
+- 单元格（E2 紧凑格式）：值编码为二进制 payload（1 字节类型 + 原内容：文本=utf8、
+  数字/日期=float64），`iv = HMAC-SHA256(sivKey, payload)[0:8]`，AES-256-GCM
+  （tag 8B）加密，写回 `'E2:' + base64nopad(iv ‖ 密文 ‖ tag)`——比常见逐格
+  base64 格式短约 45%，脱敏文件发给 LLM 处理时显著省 token
 - **确定性加密**：同一明文在任何文件、任何时间密文完全相同（订单等数据可
   跨表关联）；代价是密文暴露值相等性与频率
-- 空值、公式单元格、已有 ENC1 前缀的值跳过；还原时第一个 ENC1 格校验失败
+- 空值、公式单元格、已有 E2 前缀的值跳过；还原时第一个 E2 格校验失败
   即判为密码错误（"密码不符或文件被篡改"），个别格失败则记录地址继续
 - CSV：输入自动检测 GBK 并转码；输出一律 UTF-8 带 BOM + CRLF（Windows 版
   Excel 双击不乱码）
