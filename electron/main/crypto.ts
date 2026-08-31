@@ -1,19 +1,26 @@
 import crypto from 'node:crypto'
 
 /**
- * 确定性可逆加密：
+ * 确定性可逆加密（E2 紧凑格式）：
  * - scrypt(password, salt) 派生主密钥，HKDF-SHA256 分出 encKey / sivKey
- * - iv = HMAC-SHA256(sivKey, payload)[0:12]（同一明文任何文件任何时间密文相同；
+ * - payload 二进制化：1 字节类型 + 原内容（文本=utf8，数字/日期=float64 BE）
+ * - iv = HMAC-SHA256(sivKey, payload)[0:8]（同一明文任何文件任何时间密文相同；
  *   订单等数据需要跨表关联，用户已接受暴露值相等性与频率的代价）
- * - AES-256-GCM(encKey, iv, payload)，单元格写回 'ENC1:' + base64(iv ‖ 密文 ‖ tag)
+ * - AES-256-GCM（authTagLength 8），单元格写回
+ *   'E2:' + base64nopad(iv(8B) ‖ 密文 ‖ tag(8B))——比 ENC1 短约 45%，
+ *   降低下游 LLM token 消耗
  * 纯函数模块，不依赖 electron，可独立单测。
  */
 
-const PREFIX = 'ENC1:'
-const IV_LEN = 12
-const TAG_LEN = 16
+const PREFIX = 'E2:'
+const IV_LEN = 8
+const TAG_LEN = 8
 const KEY_LEN = 32
 const HKDF_SALT = 'sheet-masking-v1'
+
+const TYPE_STRING = 0x01
+const TYPE_NUMBER = 0x02
+const TYPE_DATE = 0x03
 
 export interface CryptoContext {
   encKey: Buffer
@@ -39,12 +46,54 @@ export function isEncrypted(value: unknown): value is string {
   return typeof value === 'string' && value.startsWith(PREFIX)
 }
 
+/** CellPayload → 二进制：0x01‖utf8 / 0x02‖float64BE / 0x03‖float64BE(ms) */
+function encodePayload(payload: CellPayload): Buffer {
+  switch (payload[0]) {
+    case 's':
+      return Buffer.concat([Buffer.from([TYPE_STRING]), Buffer.from(payload[1], 'utf8')])
+    case 'n': {
+      const buf = Buffer.alloc(9)
+      buf[0] = TYPE_NUMBER
+      buf.writeDoubleBE(payload[1], 1)
+      return buf
+    }
+    case 'd': {
+      const buf = Buffer.alloc(9)
+      buf[0] = TYPE_DATE
+      buf.writeDoubleBE(new Date(payload[1]).getTime(), 1)
+      return buf
+    }
+  }
+}
+
+/** 二进制 → CellPayload；结构非法返回 null */
+function decodePayload(buf: Buffer): CellPayload | null {
+  if (buf.length < 1) return null
+  const type = buf[0]
+  const body = buf.subarray(1)
+  switch (type) {
+    case TYPE_STRING:
+      return ['s', body.toString('utf8')]
+    case TYPE_NUMBER:
+      return body.length === 8 ? ['n', body.readDoubleBE(0)] : null
+    case TYPE_DATE:
+      return body.length === 8 ? ['d', new Date(body.readDoubleBE(0)).toISOString()] : null
+    default:
+      return null
+  }
+}
+
 export function encryptPayload(ctx: CryptoContext, payload: CellPayload): string {
-  const plaintext = Buffer.from(JSON.stringify(payload), 'utf8')
+  const plaintext = encodePayload(payload)
   const iv = crypto.createHmac('sha256', ctx.sivKey).update(plaintext).digest().subarray(0, IV_LEN)
-  const cipher = crypto.createCipheriv('aes-256-gcm', ctx.encKey, iv)
+  const cipher = crypto.createCipheriv('aes-256-gcm', ctx.encKey, iv, {
+    authTagLength: TAG_LEN,
+  })
   const ciphertext = Buffer.concat([cipher.update(plaintext), cipher.final()])
-  return PREFIX + Buffer.concat([iv, ciphertext, cipher.getAuthTag()]).toString('base64')
+  return (
+    PREFIX +
+    Buffer.concat([iv, ciphertext, cipher.getAuthTag()]).toString('base64').replace(/=+$/, '')
+  )
 }
 
 export function decryptPayload(ctx: CryptoContext, value: string): CellPayload {
@@ -58,17 +107,14 @@ export function decryptPayload(ctx: CryptoContext, value: string): CellPayload {
   const ciphertext = buf.subarray(IV_LEN, buf.length - TAG_LEN)
   const tag = buf.subarray(buf.length - TAG_LEN)
   try {
-    const decipher = crypto.createDecipheriv('aes-256-gcm', ctx.encKey, iv)
+    const decipher = crypto.createDecipheriv('aes-256-gcm', ctx.encKey, iv, {
+      authTagLength: TAG_LEN,
+    })
     decipher.setAuthTag(tag)
     const plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()])
-    const parsed = JSON.parse(plaintext.toString('utf8')) as unknown
-    if (Array.isArray(parsed) && parsed.length === 2) {
-      const [kind, val] = parsed as [unknown, unknown]
-      if (kind === 's' && typeof val === 'string') return ['s', val]
-      if (kind === 'n' && typeof val === 'number') return ['n', val]
-      if (kind === 'd' && typeof val === 'string') return ['d', val]
-    }
-    return fail()
+    const payload = decodePayload(plaintext)
+    if (payload === null) return fail()
+    return payload
   } catch {
     return fail()
   }

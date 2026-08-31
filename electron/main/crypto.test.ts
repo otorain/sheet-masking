@@ -15,7 +15,7 @@ const salt = generateSalt()
 const ctx = initCrypto(password, salt)
 
 describe('initCrypto', () => {
-  it('同一密码+salt 派生的密钥一致（跨"文件"确定性）', () => {
+  it('同一密码+salt 派生的密钥一致（跨文件确定性）', () => {
     const a = initCrypto(password, salt)
     expect(a.encKey.equals(ctx.encKey)).toBe(true)
     expect(a.sivKey.equals(ctx.sivKey)).toBe(true)
@@ -27,20 +27,29 @@ describe('initCrypto', () => {
   })
 })
 
-describe('encryptPayload', () => {
+describe('encryptPayload（E2 紧凑格式）', () => {
   it('确定性：同一明文多次加密结果完全相同', () => {
     expect(encryptPayload(ctx, ['s', '张三'])).toBe(encryptPayload(ctx, ['s', '张三']))
   })
 
-  it('不同明文密文不同，且带 ENC1: 前缀', () => {
+  it('不同明文密文不同，且带 E2: 前缀', () => {
     const a = encryptPayload(ctx, ['s', '张三'])
     const b = encryptPayload(ctx, ['s', '李四'])
     expect(a).not.toBe(b)
+    expect(a.startsWith('E2:')).toBe(true)
     expect(isEncrypted(a)).toBe(true)
   })
 
-  it('isEncrypted 只认 ENC1: 前缀的字符串', () => {
+  it('紧凑性：短值密文显著短于 ENC1 时代（61 字符）', () => {
+    // 张三 = 6B utf8：3 + base64nopad(8+7+8=23B → 31) = 34 字符
+    expect(encryptPayload(ctx, ['s', '张三'])).toHaveLength(34)
+    // 手机号 11B：3 + base64nopad(8+12+8=28B → 38) = 41 字符
+    expect(encryptPayload(ctx, ['s', '13800138000'])).toHaveLength(41)
+  })
+
+  it('isEncrypted 只认 E2: 前缀的字符串', () => {
     expect(isEncrypted('张三')).toBe(false)
+    expect(isEncrypted('ENC1:AAAA')).toBe(false) // 旧格式不再识别
     expect(isEncrypted(123)).toBe(false)
     expect(isEncrypted(null)).toBe(false)
     expect(isEncrypted(undefined)).toBe(false)
@@ -54,6 +63,8 @@ describe('decryptPayload 往返', () => {
     ['s', ''],
     ['n', 12345.67],
     ['n', 0],
+    ['n', NaN],
+    ['n', Infinity],
     ['d', '2026-08-31T00:00:00.000Z'],
   ]
   for (const payload of roundtrips) {
@@ -70,19 +81,24 @@ describe('decryptPayload 往返', () => {
 
   it('篡改 1 字节即解密失败（GCM tag 校验）', () => {
     const enc = encryptPayload(ctx, ['s', '张三'])
-    const buf = Buffer.from(enc.slice('ENC1:'.length), 'base64')
+    const buf = Buffer.from(enc.slice(enc.indexOf(':') + 1), 'base64')
     buf[buf.length - 1] ^= 1
-    expect(() => decryptPayload(ctx, 'ENC1:' + buf.toString('base64'))).toThrow(
+    expect(() => decryptPayload(ctx, 'E2:' + buf.toString('base64'))).toThrow(
       '密码不符或文件被篡改',
     )
   })
 
   it('畸形密文抛错而非崩溃', () => {
-    expect(() => decryptPayload(ctx, 'ENC1:')).toThrow('密码不符或文件被篡改')
-    expect(() => decryptPayload(ctx, 'ENC1:not-valid-base64!!!')).toThrow(
+    expect(() => decryptPayload(ctx, 'E2:')).toThrow('密码不符或文件被篡改')
+    expect(() => decryptPayload(ctx, 'E2:not-valid-base64!!!')).toThrow(
       '密码不符或文件被篡改',
     )
-    expect(() => decryptPayload(ctx, 'ENC1:aGVsbG8td29ybGQtdGhpcy1pcy10b28tc2hvcnQ=')).toThrow(
+    expect(() => decryptPayload(ctx, 'E2:aGVsbG8td29ybGQtdGhpcy1pcy10b28tc2hvcnQ=')).toThrow(
+      '密码不符或文件被篡改',
+    )
+    // 长度够但类型字节非法（0x09 不是 01/02/03）
+    const badType = Buffer.concat([Buffer.alloc(8), Buffer.from([0x09, 0x41]), Buffer.alloc(8)])
+    expect(() => decryptPayload(ctx, 'E2:' + badType.toString('base64'))).toThrow(
       '密码不符或文件被篡改',
     )
   })
