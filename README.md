@@ -1,108 +1,49 @@
-# electron-vite-vue
+# sheet-masking（报表脱敏工具）
 
-🥳 Really simple `Electron` + `Vue` + `Vite` boilerplate.
+对财务/公司数据报表（.xlsx / .csv）做**可逆脱敏**的桌面工具：加密敏感列，
+事后可用同一主密码完整还原。基于 electron-vite-vue（Electron 42 + Vue 3 +
+Vite 8 + Tailwind v4/daisyUI）。
 
-[![GitHub Build](https://github.com/electron-vite/electron-vite-vue/actions/workflows/build.yml/badge.svg)](https://github.com/electron-vite/electron-vite-vue/actions/workflows/build.yml)
-[![GitHub Discord](https://img.shields.io/badge/chat-discord-blue?logo=discord)](https://discord.gg/sRqjYpEAUK)
+## 用法
 
-## Features
+1. 首次启动设置主密码（经系统安全存储保存，Windows 为 DPAPI，不明文落盘；
+   换机/换系统用户后需重新输入）
+2. 选择 .xlsx / .csv 文件 → 按 sheet 展示表头勾选表（内置规则自动勾选敏感列，
+   可手动调整；表头行自动探测，可下拉修正后重跑规则；隐藏 sheet 照常列出）
+3. 「脱敏」生成 `原名.已脱敏.扩展名`；「还原」对任何含 ENC1 密文的文件全文
+   扫描还原（与列位置无关，增删列/调列序/另存均可还原）
+4. 设置页：启停内置规则、增删自定义关键词/正则、修改密码（**修改后旧密码
+   脱敏的文件无法再还原，请先还原全部文件**）
 
-📦 Out of the box
-🎯 Based on the official [template-vue-ts](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-vue-ts), less invasive
-🌱 Extensible, really simple directory structure
-💪 Support using Node.js API in Electron-Renderer
-🔩 Support C/C++ native addons
-🖥 It's easy to implement multiple windows
+## 加密格式
 
-## Quick Setup
+- 主密钥：`scrypt(password, salt)`，HKDF-SHA256 分出加密钥与 IV 钥
+- 单元格：值序列化为带类型 JSON（`["s",文本]` / `["n",数字]` / `["d",ISO日期]`），
+  `iv = HMAC-SHA256(sivKey, payload)[0:12]`，AES-256-GCM 加密，写回
+  `'ENC1:' + base64(iv ‖ 密文 ‖ tag)`
+- **确定性加密**：同一明文在任何文件、任何时间密文完全相同（订单等数据可
+  跨表关联）；代价是密文暴露值相等性与频率
+- 空值、公式单元格、已有 ENC1 前缀的值跳过；还原时第一个 ENC1 格校验失败
+  即判为密码错误（"密码不符或文件被篡改"），个别格失败则记录地址继续
+- CSV：输入自动检测 GBK 并转码；输出一律 UTF-8 带 BOM + CRLF（Windows 版
+  Excel 双击不乱码）
+
+## 已知限制
+
+- ExcelJS 往返保真边界：样式/公式/合并单元格/列宽保留；**图表、图片、数据
+  透视表会丢失**
+- 极端大文件（50 万行以上）可能超出内存：主进程堆已提额至 12GB，仍失败时
+  请拆分文件
+
+## 开发
 
 ```sh
-# clone the project
-git clone https://github.com/electron-vite/electron-vite-vue.git
-
-# enter the project directory
-cd electron-vite-vue
-
-# install dependency (pnpm is the package manager; pnpm-lock.yaml is committed)
 pnpm install
-
-# develop
-pnpm run dev
+pnpm run dev       # 开发
+pnpm test          # vitest 单测（crypto/rules/sheet/csv）
+pnpm run build     # 类型检查 + 构建 + electron-builder 打包
 ```
 
-## Tailwind CSS (v4) + daisyUI
-
-Tailwind CSS v4 is wired up through the official Vite plugin:
-
-- `tailwindcss` + `@tailwindcss/vite` are in `dependencies`
-- the plugin is registered in `vite.config.ts`
-- `src/style.css` only contains `@import "tailwindcss";` and
-  `@plugin "daisyui";` — utilities, daisyUI components, the theme and the
-  preflight reset are generated at build time
-
-Start using utility classes directly in any Vue template, e.g.
-`class="mt-8 text-slate-500 dark:text-slate-400"`. daisyUI adds semantic
-component classes (`btn`, `card`, `badge`, `input`, …) with light and dark
-themes out of the box — see `src/App.vue` for a demo.
-
-## TypeORM (better-sqlite3)
-
-TypeORM runs in the **main process only** (its driver is a native module and
-the renderer is sandboxed). The integration uses the Active Record pattern:
-
-- `electron/main/entities/Note.ts` — the `Note` entity (`extends BaseEntity`)
-  mapped to the `notes` table. Every column declares its `type` explicitly
-  because the main process is bundled by the Vite build (vite-plugin-electron),
-  which does not support `emitDecoratorMetadata`
-- `electron/main/db.ts` — lazily initializes the `DataSource`
-  (`better-sqlite3` driver, `global-news.db` in `userData`,
-  `synchronize: true`, `enableWAL: true`) and destroys it on `will-quit`
-- `electron/main/index.ts` — exposes two IPC handlers: `db:status` and
-  `db:note:add`, implemented with Active Record calls (`Note.count()`,
-  `Note.create(...).save()`)
-- `src/App.vue` — renderer demo that calls both over IPC
-
-Notes:
-
-- better-sqlite3 v13 ships ABI-stable N-API prebuilds, so no source
-  compilation is needed for Electron; `postinstall` still runs
-  `electron-builder install-app-deps` to rebuild any future native modules
-  against the Electron ABI. (typeorm 1.x declares a `better-sqlite3@^12`
-  peer range; v13 is API-compatible — the peer warning is benign.)
-- pnpm 11 denies dependency build scripts unless they are explicitly allowed;
-  see `allowBuilds` in `pnpm-workspace.yaml`.
-- `better-sqlite3` and `typeorm` must stay in `dependencies` (not
-  `devDependencies`) so `electron-builder` packages them with the app.
-  `reflect-metadata` needs no explicit entry: typeorm v1 depends on it and
-  loads it internally.
-- `experimentalDecorators: true` is set in both `tsconfig.json` (the Vite
-  build reads the nearest `tsconfig.json` when transpiling `electron/`) and
-  `tsconfig.node.json` (type checking). `emitDecoratorMetadata` stays off.
-
-## Debug
-
-![electron-vite-react-debug.gif](https://github.com/electron-vite/electron-vite-react/blob/main/electron-vite-react-debug.gif?raw=true)
-
-## Directory
-
-```diff
-+ ├─┬ electron
-+ │ ├─┬ main
-+ │ │ └── index.ts    entry of Electron-Main
-+ │ └─┬ preload
-+ │   └── index.ts    entry of Preload-Scripts
-  ├─┬ src
-  │ └── main.ts       entry of Electron-Renderer
-  ├── index.html
-  ├── package.json
-  └── vite.config.ts
-```
-
-## Security Note
-
-The `renderer: {}` preset in `vite.config.ts` is only a Vite adapter that polyfills Electron, Node.js APIs and native modules for the renderer process. It is not the same as enabling Node integration. If you want direct Node.js access in the renderer, enable `nodeIntegration` in the `BrowserWindow` webPreferences in the main process and review the security impact carefully.
-
-## FAQ
-
-- [C/C++ addons, Node.js modules - Pre-Bundling](https://github.com/electron-vite/vite-plugin-electron-renderer#dependency-pre-bundling)
-- [dependencies vs devDependencies](https://github.com/electron-vite/vite-plugin-electron-renderer#dependencies-vs-devdependencies)
+Tailwind CSS v4 + daisyUI 经 `@tailwindcss/vite` 与 `@plugin "daisyui"` 接入
+（见 `src/style.css`）。Windows NSIS 安装包需在 Windows 机器或 CI 构建
+（Linux 交叉构建 rcedit 需 wine）。
