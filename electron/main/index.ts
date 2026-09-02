@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
@@ -60,6 +60,9 @@ const preload = path.join(__dirname, '../preload/index.mjs')
 const indexHtml = path.join(RENDERER_DIST, 'index.html')
 
 async function createWindow() {
+  // 默认应用菜单（File/Edit/View/…）无使用场景，完全移除（Alt 也唤不出）。
+  // 输入框复制粘贴是系统/Chromium 原生能力，不依赖菜单，不受影响。
+  Menu.setApplicationMenu(null)
   win = new BrowserWindow({
     title: '报表脱敏工具',
     icon: path.join(process.env.VITE_PUBLIC, process.platform === 'linux' ? 'logo.png' : 'favicon.ico'),
