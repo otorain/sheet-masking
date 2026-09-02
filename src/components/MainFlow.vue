@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { deepUnwrap } from '../lib/serialize'
+import { mergeSelections } from '../lib/selections'
 import type {
   AnalyzeResult,
   ProcessMode,
@@ -79,6 +80,31 @@ async function changeHeaderRow(sheetName: string, row: number) {
     busy.value = false
   }
 }
+
+/** 规则保存后重载当前文件（新规则即时生效）；headerRow 以当前值作 override 保留用户修正 */
+async function reloadAnalysis() {
+  if (!analysis.value) return
+  const overrides: Record<string, number> = {}
+  for (const s of analysis.value.sheets) overrides[s.name] = s.headerRow
+  busy.value = true
+  errorMsg.value = ''
+  summary.value = null
+  try {
+    const next = (await window.ipcRenderer.invoke(
+      'file:reanalyze',
+      analysis.value.filePath,
+      overrides,
+    )) as AnalyzeResult
+    selections.value = mergeSelections(analysis.value, next, selections.value)
+    analysis.value = next
+  } catch (err) {
+    errorMsg.value = (err as Error).message
+  } finally {
+    busy.value = false
+  }
+}
+
+defineExpose({ reloadAnalysis })
 
 function selectedCount(sheetName: string): number {
   return selections.value[sheetName]?.cols.length ?? 0
