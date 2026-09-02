@@ -10,6 +10,19 @@ AES-256-GCM 可逆加密。从 electron-vite-vue 模板改造，pnpm 11.3.0 管�
 - `pnpm run build` — 完整链：vue-tsc + **tsc -p tsconfig.node.json** + vite build + electron-builder
 - 快速验证（不打包）：`pnpm exec vitest run && pnpm exec vue-tsc --noEmit && pnpm exec tsc --noEmit -p tsconfig.node.json && pnpm exec vite build`
 
+## 打包（本机是 Linux）
+
+- `pnpm run build` 末尾的 electron-builder **只打宿主机平台**（Linux AppImage）。
+  给脚本追加平台参数无效：`pnpm run build -- --win --x64` 的参数会被 `sh -c`
+  吞成位置参数，到不了 electron-builder。打 Windows 包必须显式：
+  `pnpm exec vite build && pnpm exec electron-builder --win --x64`
+- NSIS 需要 wine（rcedit 编辑 exe 元数据/签名），本机未装。可行方案：docker
+  镜像 `electronuserland/builder:wine` 做 wine shim 放到 PATH 最前再跑上面的命令
+  （shim 要点：`$HOME` 同路径挂载使绝对路径可用、以宿主 uid 运行避免产物变
+  root 属主、挂持久 WINEPREFIX 目录；本机 docker 免 sudo）
+- 未配置签名证书：安装包未签名（SmartScreen 会提示）；win/linux 图标已配置
+  （`build/icon.ico` / `build/icon.png`）
+
 ## 架构要点（不看代码容易踩的坑）
 
 - **主进程 `notBundle()` 逐文件转译为 ESM**（package.json `type: module`）：
