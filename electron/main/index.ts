@@ -143,7 +143,7 @@ ipcMain.handle('file:analyze', async (event) => {
   const win = BrowserWindow.fromWebContents(event.sender)
   const result = await dialog.showOpenDialog(win!, {
     properties: ['openFile'],
-    filters: [{ name: '表格文件', extensions: ['xlsx', 'csv'] }],
+    filters: [{ name: '表格文件', extensions: ['xlsx', 'xls', 'csv'] }],
   })
   if (result.canceled || !result.filePaths[0]) return null
   return analyzeFile(result.filePaths[0], getRulesConfig())
@@ -163,7 +163,7 @@ ipcMain.handle(
   ) => {
     const ctx = getCryptoContext() // 未解锁先抛错，不弹保存框
     const kind = kindFromPath(req.filePath)
-    const ext = kind === 'xlsx' ? '.xlsx' : '.csv'
+    const ext = `.${kind}`
     const base = path.basename(req.filePath, ext)
     const suffix = req.mode === 'encrypt' ? '已脱敏' : '已还原'
     const win = BrowserWindow.fromWebContents(event.sender)

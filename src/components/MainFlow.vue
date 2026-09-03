@@ -147,7 +147,7 @@ onBeforeUnmount(() => offProgress?.())
       <div class="card-body flex-row items-center gap-3">
         <button class="btn btn-primary" :disabled="busy" @click="pickFile">
           <span v-if="busy" class="loading loading-spinner loading-xs" />
-          选择文件（.xlsx / .csv）
+          选择文件（.xlsx / .xls / .csv）
         </button>
         <span v-if="analysis" class="truncate text-sm opacity-70">{{ analysis.filePath }}</span>
       </div>

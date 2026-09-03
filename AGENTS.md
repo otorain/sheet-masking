@@ -1,6 +1,6 @@
 # AGENTS.md
 
-报表脱敏工具：Electron 42 + Vue 3 + Vite 8 桌面应用，对 .xlsx/.csv 敏感列做确定性
+报表脱敏工具：Electron 42 + Vue 3 + Vite 8 桌面应用，对 .xlsx/.xls/.csv 敏感列做确定性
 AES-256-GCM 可逆加密。从 electron-vite-vue 模板改造，pnpm 11.3.0 管理。
 
 ## 常用命令
@@ -27,7 +27,7 @@ AES-256-GCM 可逆加密。从 electron-vite-vue 模板改造，pnpm 11.3.0 管�
 
 - **主进程 `notBundle()` 逐文件转译为 ESM**（package.json `type: module`）：
   `electron/` 内相对 import **必须带 `.js` 后缀**；运行时依赖（exceljs、fast-csv、
-  iconv-lite）必须在 **dependencies**，不能进 devDependencies（electron-builder 只打包前者）
+  iconv-lite、xlsx）必须在 **dependencies**，不能进 devDependencies（electron-builder 只打包前者）
 - **渲染进程 sandbox**：无 nodeIntegration。文件/加密只在主进程，渲染端经
   `window.ipcRenderer.invoke`；`electron/main/index.ts` 是唯一 IPC 入口
 - **共享类型在 `electron/shared/types.ts`**（纯 interface）：主进程
@@ -57,6 +57,10 @@ AES-256-GCM 可逆加密。从 electron-vite-vue 模板改造，pnpm 11.3.0 管�
   会整体搬迁配置目录
 - CI（`.github/workflows/build.yml`）是模板遗留，用 `npm install` 而非 pnpm；
   本地一律用 pnpm
+- SheetJS（xlsx 包）走 CDN tarball 依赖（npm registry 的 0.18.5 有未修 CVE，官方新版
+  只发 cdn.sheetjs.com，install 需可达）；其 ESM 构建不自动加载 node:fs，
+  readFile/writeFile 前必须 `XLSX.set_fs(fs)`；biff8 写回不保留公式与样式，
+  且必须带 `bookSST: true` 否则字符串按 255 字符截断
 
 ## 工作流约定
 
