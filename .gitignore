@@ -31,3 +31,6 @@ bun.lock
 
 # TypeScript incremental build info
 *.tsbuildinfo
+
+# git worktree 工作区
+.worktrees
