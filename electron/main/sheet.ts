@@ -15,7 +15,7 @@ import {
   detectHeaderRow,
 } from './analysis.js'
 import { analyzeCsv, processCsv } from './csv.js'
-import { analyzeXls } from './xls.js'
+import { analyzeXls, processXls } from './xls.js'
 import type {
   AnalyzeResult,
   FileKind,
@@ -59,6 +59,7 @@ export async function processFile(
 ): Promise<ProcessSummary> {
   const kind = kindFromPath(filePath)
   if (kind === 'xlsx') return processXlsx(filePath, mode, selections, outPath, ctx, onProgress)
+  if (kind === 'xls') return processXls(filePath, mode, selections, outPath, ctx, onProgress)
   return processCsv(filePath, mode, selections[path.basename(filePath)], outPath, ctx, onProgress)
 }
 
