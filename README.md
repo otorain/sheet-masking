@@ -10,7 +10,7 @@ Vite 8 + Tailwind v4/daisyUI）。
    换机/换系统用户后需重新输入）
 2. 选择 .xlsx / .xls / .csv 文件 → 按 sheet 展示表头勾选表（内置规则自动勾选敏感列，
    可手动调整；表头行自动探测，可下拉修正后重跑规则；隐藏 sheet 照常列出）
-3. 「脱敏」生成 `原名.已脱敏.扩展名`；「还原」对任何含 ENC1 密文的文件全文
+3. 「脱敏」生成 `原名.已脱敏.扩展名`；「还原」对任何含 E2 密文的文件全文
    扫描还原（与列位置无关，增删列/调列序/另存均可还原）
 4. 设置弹窗：启停内置规则、增删自定义关键词/正则、修改密码（**修改后旧密码
    脱敏的文件无法再还原，请先还原全部文件**）；保存规则后自动按新规则重新
@@ -25,7 +25,7 @@ Vite 8 + Tailwind v4/daisyUI）。
   base64 格式短约 45%，脱敏文件发给 LLM 处理时显著省 token
 - **确定性加密**：同一明文在任何文件、任何时间密文完全相同（订单等数据可
   跨表关联）；代价是密文暴露值相等性与频率
-- 空值、公式单元格、已有 E2 前缀的值跳过；还原时第一个 E2 格校验失败
+- 空值、公式单元格（.xls 除外，见已知限制）、已有 E2 前缀的值跳过；还原时第一个 E2 格校验失败
   即判为密码错误（"密码不符或文件被篡改"），个别格失败则记录地址继续
 - CSV：输入自动检测 GBK 并转码；输出一律 UTF-8 带 BOM + CRLF（Windows 版
   Excel 双击不乱码）
@@ -47,7 +47,7 @@ Vite 8 + Tailwind v4/daisyUI）。
 ```sh
 pnpm install
 pnpm run dev       # 开发
-pnpm test          # vitest 单测（crypto/rules/sheet/csv）
+pnpm test          # vitest 单测（crypto/rules/sheet/xls/csv）
 pnpm run build     # 类型检查 + 构建 + electron-builder 打包
 ```
 
