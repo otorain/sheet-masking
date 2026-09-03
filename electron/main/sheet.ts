@@ -15,6 +15,7 @@ import {
   detectHeaderRow,
 } from './analysis.js'
 import { analyzeCsv, processCsv } from './csv.js'
+import { analyzeXls } from './xls.js'
 import type {
   AnalyzeResult,
   FileKind,
@@ -42,7 +43,9 @@ export async function analyzeFile(
   const sheets =
     kind === 'xlsx'
       ? await analyzeXlsx(filePath, rules, headerRowOverrides)
-      : await analyzeCsv(filePath, rules, headerRowOverrides[path.basename(filePath)])
+      : kind === 'xls'
+        ? await analyzeXls(filePath, rules, headerRowOverrides)
+        : await analyzeCsv(filePath, rules, headerRowOverrides[path.basename(filePath)])
   return { filePath, kind, sheets }
 }
 
