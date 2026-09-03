@@ -48,9 +48,11 @@
   65536 行 × 256 列，内存风险远低于 xlsx，全量可接受；读失败包装为中文错误，
   对齐 `processXlsx` 风格）。
 - 逐 sheet 遍历 range（`XLSX.utils.decode_range(ws['!ref'])`，空 sheet 无 `!ref` 跳过）：
-  - **加密**：跳过表头行（`selection.headerRow`）、公式格（`cell.f` 存在）、
-    已有 `E2:` 前缀格、非 文本/数字/日期 格（布尔 `t:'b'`、错误 `t:'e'`、空 `t:'z'` 跳过，
-    对齐 `valueToPayload` 语义）。命中格：`cell.v = encryptPayload(...)`、`cell.t = 's'`、
+  - **加密**：跳过表头行（`selection.headerRow`）、已有 `E2:` 前缀格、
+    非 文本/数字/日期 格（布尔 `t:'b'`、错误 `t:'e'`、空 `t:'z'` 跳过，
+    对齐 `valueToPayload` 语义）。**公式格不跳过**（见第 3 节：公式写回必然退化，
+    跳过会让选中列的缓存值明文残留），按缓存值类型照常加密，`skippedFormulas`
+    对 xls 恒 0。命中格：`cell.v = encryptPayload(...)`、`cell.t = 's'`、
     删 `cell.w`（格式化文本缓存），保留 `cell.z`（数字格式）。
   - **解密**：全 range 扫 `E2:` 前缀，与列位置无关；第一个密文格校验失败 →
     抛「密码不符或文件被篡改」整体中止；个别失败记录 `sheet名!A1` 地址进
@@ -59,10 +61,27 @@
     日期格式），同样删 `cell.w`。
 - 合并单元格 `!merges`、列宽 `!cols` 等在 workbook 对象上原样不动，写回自然保留。
 - 进度：按已处理行数 `onProgress`，每 `YIELD_EVERY_ROWS` 行 `setImmediate` 让出事件循环。
-- 写回：`XLSX.writeFile(wb, outPath, { bookType: 'biff8', cellDates: true })`
-  （BIFF5 及更老文件读入后统一写成 BIFF8）。
+- 写回：`XLSX.writeFile(wb, outPath, { bookType: 'biff8', bookSST: true })`
+  （BIFF5 及更老文件读入后统一写成 BIFF8；`bookSST: true` 见第 3 节）。
 
-### 3. 触点改动
+### 3. SheetJS 0.20.3 源码勘察结论（实施前已确认）
+
+直接阅读 xlsx.mjs 源码确认的硬性事实，设计据此调整：
+
+- **公式不可保留**：解析 .xls 公式只产出 `cell.f` 字符串，从不保留二进制 `cell.bf`；
+  而 biff8 写回（`write_ws_biff8_cell`）只认 `cell.bf`，无 bf 的公式格被写成静态缓存值。
+  CE 无公式编译 API，**xls 往返公式必然退化为缓存值**。因此 xls 路径不跳过公式格，
+  按缓存值照常加密（安全优先：跳过会让选中列敏感值明文残留）。
+- **字符串长度**：biff8 默认写 Label 记录并 `.slice(0, 255)` 截断；`bookSST: true`
+  改用 LabelSst + 共享字符串表（Excel 原生机制，无长度限制）。中文写入安全
+  （Label/SST 均为 UTF-16LE）。
+- **ESM 构建不自动加载 fs**：`readFile`/`writeFile` 依赖 `XLSX.set_fs(fs)` 注入
+  （`import * as XLSX from 'xlsx'`，ESM 命名导出与 d.ts 一致，运行时/类型两侧都稳）。
+- **已验证可保留**：`!cols` 列宽（COLINFO）、`!merges` 合并单元格（MergeCells）、
+  sheet 隐藏状态（BoundSheet8 的 Hidden 位）、`cell.z` 数字格式（cellNF 读入后随
+  XF 写回）。均由往返单测固化。
+
+### 4. 触点改动
 
 - `electron/shared/types.ts`：`FileKind` 加 `'xls'`。
 - `electron/main/sheet.ts`：`kindFromPath` 认 `.xls`（报错文案改「仅支持 .xlsx / .xls / .csv」）；
@@ -72,10 +91,11 @@
 - `src/components/MainFlow.vue`：按钮文案「选择文件（.xlsx / .csv）」加 `.xls`。其余零改动
   （UI 无 kind 分支）。
 
-### 4. 已知限制（README 补充）
+### 5. 已知限制（README 补充）
 
 - .xls 经 SheetJS 读写：**单元格样式（字体/填充/边框）丢失**（社区版不写样式）；
-  图表/图片/透视表丢失（与 xlsx 现状一致）；BIFF5 及更老格式统一写成 BIFF8。
+  **公式退化为静态缓存值**（选中列的缓存值照常脱敏）；图表/图片/透视表丢失
+  （与 xlsx 现状一致）；BIFF5 及更老格式统一写成 BIFF8。
 - 列宽/合并单元格/数字格式保留（workbook 对象不动，由往返单测固化验证）。
 
 ## 不做（YAGNI）
@@ -94,8 +114,9 @@
 - 加密→还原往返：文本/数字/日期类型不变、非选中列不动、表头行不动
 - 确定性：同明文两次加密密文相同
 - 错误密码首格即抛「密码不符或文件被篡改」；篡改密文记录 failedCells
-- 公式格跳过（skippedFormulas 计数）；空列选择整 sheet 跳过
+- 空列选择整 sheet 跳过；超长文本（>255 字符）往返不截断（验证 `bookSST`）
 - 保真断言：合并单元格、列宽、数字格式（如 `0.00`）往返保留
+- 无公式测试 fixture：SheetJS 写不出公式记录（无 `bf`），公式退化由文档承载
 - `kindFromPath` 补 `.xls` 用例（含大小写 `.XLS`）
 
 ## 验证
