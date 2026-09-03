@@ -15,8 +15,8 @@ describe('deepUnwrap', () => {
 
   it('嵌套 reactive 数组同样解包', () => {
     const keywords = ref(['工号', '户名'])
-    const plain = deepUnwrap({ customKeywords: keywords.value })
-    expect(plain).toEqual({ customKeywords: ['工号', '户名'] })
+    const plain = deepUnwrap({ exact: keywords.value })
+    expect(plain).toEqual({ exact: ['工号', '户名'] })
     expect(() => structuredClone(plain)).not.toThrow()
   })
 

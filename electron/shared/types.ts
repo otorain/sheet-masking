@@ -45,16 +45,14 @@ export interface ProcessSummary {
 }
 
 export interface RulesConfig {
-  /** 被禁用的内置规则 id 列表（默认全部启用） */
-  disabledBuiltins: string[]
-  customKeywords: string[]
-  /** 正则 source 字符串；保存时已校验可编译 */
-  customPatterns: string[]
-}
-
-export interface BuiltinRule {
-  id: string
-  label: string
-  kind: 'keyword' | 'pattern'
-  value: string
+  /** 完全匹配：表头 trim 后 === 关键词 */
+  exact: string[]
+  /** 包含：表头 includes 关键词 */
+  contains: string[]
+  /** 以关键词开头 */
+  startsWith: string[]
+  /** 以关键词结尾 */
+  endsWith: string[]
+  /** 自定义内容正则 source（无预设）；保存时已校验可编译 */
+  patterns: string[]
 }

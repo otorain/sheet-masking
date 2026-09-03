@@ -14,7 +14,6 @@ import {
   unlockWithPassword,
 } from './config.js'
 import { analyzeFile, kindFromPath, processFile } from './sheet.js'
-import { BUILTIN_RULES } from './rules.js'
 import type { ProcessMode, ProcessSelections, RulesConfig } from '../shared/types.js'
 
 // ExcelJS 全量加载整个工作簿为对象图（50 万行 × 15 列 ≈ 4-8GB 堆），
@@ -133,7 +132,7 @@ ipcMain.handle('app:reset-password', () => {
   resetPassword()
 })
 
-ipcMain.handle('rules:get', () => ({ config: getRulesConfig(), builtins: BUILTIN_RULES }))
+ipcMain.handle('rules:get', () => ({ config: getRulesConfig() }))
 
 ipcMain.handle('rules:save', (_event, config: unknown) => {
   saveRulesConfig(config as RulesConfig)

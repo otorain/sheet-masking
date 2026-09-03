@@ -1,17 +1,28 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { ref } from 'vue'
 import { deepUnwrap } from '../lib/serialize'
 import ResetPassword from './ResetPassword.vue'
-import type { BuiltinRule, RulesConfig } from '../../electron/shared/types'
+import type { RulesConfig } from '../../electron/shared/types'
 
 const emit = defineEmits<{ saved: []; reset: [] }>()
 
+type KeywordKind = 'exact' | 'contains' | 'startsWith' | 'endsWith'
+
+const KEYWORD_SECTIONS: { kind: KeywordKind; title: string; placeholder: string }[] = [
+  { kind: 'exact', title: '完全匹配', placeholder: '表头恰好等于该词才命中（如：工号）' },
+  { kind: 'contains', title: '包含', placeholder: '表头包含该词即命中（如：卡号）' },
+  { kind: 'startsWith', title: '以关键词开头', placeholder: '表头以该词开头（如：手机）' },
+  { kind: 'endsWith', title: '以关键词结尾', placeholder: '表头以该词结尾（如：电话）' },
+]
+
 const dialog = ref<HTMLDialogElement | null>(null)
-const builtins = ref<BuiltinRule[]>([])
-const enabled = reactive<Record<string, boolean>>({})
-const customKeywords = ref<string[]>([])
-const customPatterns = ref<string[]>([])
-const newKeyword = ref('')
+const config = ref<RulesConfig>({ exact: [], contains: [], startsWith: [], endsWith: [], patterns: [] })
+const newKeyword = ref<Record<KeywordKind, string>>({
+  exact: '',
+  contains: '',
+  startsWith: '',
+  endsWith: '',
+})
 const newPattern = ref('')
 const oldPassword = ref('')
 const newPassword = ref('')
@@ -19,16 +30,6 @@ const newPassword2 = ref('')
 const loaded = ref(false)
 const errorMsg = ref('')
 const okMsg = ref('')
-/** 打开弹窗时按「保存输出格式」生成的配置快照，用于判断保存后规则是否真有变化 */
-let savedSnapshot = ''
-
-function currentConfig(): RulesConfig {
-  return deepUnwrap({
-    disabledBuiltins: builtins.value.filter((b) => !enabled[b.id]).map((b) => b.id),
-    customKeywords: customKeywords.value,
-    customPatterns: customPatterns.value,
-  })
-}
 
 /** App 经 template ref 调用：打开弹窗并拉取最新规则（每次打开都拉，保证多次打开数据新鲜） */
 async function open() {
@@ -37,15 +38,8 @@ async function open() {
   errorMsg.value = ''
   okMsg.value = ''
   try {
-    const result = (await window.ipcRenderer.invoke('rules:get')) as {
-      config: RulesConfig
-      builtins: BuiltinRule[]
-    }
-    builtins.value = result.builtins
-    for (const b of result.builtins) enabled[b.id] = !result.config.disabledBuiltins.includes(b.id)
-    customKeywords.value = [...result.config.customKeywords]
-    customPatterns.value = [...result.config.customPatterns]
-    savedSnapshot = JSON.stringify(currentConfig())
+    const result = (await window.ipcRenderer.invoke('rules:get')) as { config: RulesConfig }
+    config.value = result.config
     loaded.value = true
   } catch (err) {
     errorMsg.value = (err as Error).message
@@ -54,10 +48,32 @@ async function open() {
 
 defineExpose({ open })
 
-function addKeyword() {
-  const v = newKeyword.value.trim()
-  if (v && !customKeywords.value.includes(v)) customKeywords.value.push(v)
-  newKeyword.value = ''
+/** 增删即生效：保存到主进程并通知 App 重新分析；失败则回拉主进程真实配置同步 UI */
+async function applyRules() {
+  errorMsg.value = ''
+  try {
+    await window.ipcRenderer.invoke('rules:save', deepUnwrap(config.value))
+    emit('saved')
+  } catch (err) {
+    errorMsg.value = (err as Error).message
+    const result = (await window.ipcRenderer.invoke('rules:get')) as { config: RulesConfig }
+    config.value = result.config
+  }
+}
+
+function addKeyword(kind: KeywordKind) {
+  const v = newKeyword.value[kind].trim()
+  if (!v) return
+  if (!config.value[kind].includes(v)) {
+    config.value[kind].push(v)
+    applyRules()
+  }
+  newKeyword.value[kind] = ''
+}
+
+function removeKeyword(kind: KeywordKind, index: number) {
+  config.value[kind].splice(index, 1)
+  applyRules()
 }
 
 function addPattern() {
@@ -69,24 +85,16 @@ function addPattern() {
     errorMsg.value = `无效正则：${v}`
     return
   }
-  if (!customPatterns.value.includes(v)) customPatterns.value.push(v)
+  if (!config.value.patterns.includes(v)) {
+    config.value.patterns.push(v)
+    applyRules()
+  }
   newPattern.value = ''
 }
 
-async function saveRules() {
-  errorMsg.value = ''
-  okMsg.value = ''
-  try {
-    const config = currentConfig()
-    await window.ipcRenderer.invoke('rules:save', config)
-    okMsg.value = '规则已保存'
-    if (JSON.stringify(config) !== savedSnapshot) {
-      savedSnapshot = JSON.stringify(config)
-      emit('saved')
-    }
-  } catch (err) {
-    errorMsg.value = (err as Error).message
-  }
+function removePattern(index: number) {
+  config.value.patterns.splice(index, 1)
+  applyRules()
 }
 
 async function submitChangePassword() {
@@ -129,48 +137,48 @@ function onReset() {
       <template v-if="loaded">
         <div class="card bg-base-200">
           <div class="card-body">
-            <h2 class="card-title">内置规则</h2>
-            <div class="grid grid-cols-2 gap-1">
-              <label v-for="b in builtins" :key="b.id" class="flex items-center gap-2 text-sm">
-                <input v-model="enabled[b.id]" type="checkbox" class="checkbox checkbox-sm">
-                {{ b.label }}
-              </label>
+            <h2 class="card-title">表头关键词</h2>
+            <p class="text-xs opacity-60">增删立即生效，无需保存</p>
+            <div v-for="section in KEYWORD_SECTIONS" :key="section.kind" class="space-y-1">
+              <h3 class="text-sm font-semibold">{{ section.title }}</h3>
+              <div class="join w-full">
+                <input
+                  v-model="newKeyword[section.kind]"
+                  class="input input-bordered input-sm join-item w-full"
+                  :placeholder="section.placeholder"
+                  @keyup.enter="addKeyword(section.kind)"
+                >
+                <button class="btn btn-sm join-item" @click="addKeyword(section.kind)">添加</button>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                <span v-for="(kw, i) in config[section.kind]" :key="kw" class="badge badge-outline gap-1">
+                  {{ kw }}
+                  <button class="text-error" @click="removeKeyword(section.kind, i)">✕</button>
+                </span>
+              </div>
             </div>
           </div>
         </div>
 
         <div class="card bg-base-200">
           <div class="card-body">
-            <h2 class="card-title">自定义规则</h2>
-            <div class="join w-full">
-              <input
-                v-model="newKeyword"
-                class="input input-bordered input-sm join-item w-full"
-                placeholder="自定义表头关键词（如：工号）"
-                @keyup.enter="addKeyword"
-              >
-              <button class="btn btn-sm join-item" @click="addKeyword">加关键词</button>
-            </div>
+            <h2 class="card-title">内容正则（高级）</h2>
+            <p class="text-xs opacity-60">对每列前 50 行内容抽样匹配，命中即整列自动勾选</p>
             <div class="join w-full">
               <input
                 v-model="newPattern"
                 class="input input-bordered input-sm join-item w-full font-mono"
-                placeholder="自定义内容正则（如：^ORD-\d+$）"
+                placeholder="如：^ORD-\d+$"
                 @keyup.enter="addPattern"
               >
-              <button class="btn btn-sm join-item" @click="addPattern">加正则</button>
+              <button class="btn btn-sm join-item" @click="addPattern">添加</button>
             </div>
             <div class="flex flex-wrap gap-1">
-              <span v-for="(kw, i) in customKeywords" :key="'kw' + i" class="badge badge-outline gap-1">
-                关键词：{{ kw }}
-                <button class="text-error" @click="customKeywords.splice(i, 1)">✕</button>
-              </span>
-              <span v-for="(p, i) in customPatterns" :key="'re' + i" class="badge badge-outline gap-1 font-mono">
-                正则：{{ p }}
-                <button class="text-error" @click="customPatterns.splice(i, 1)">✕</button>
+              <span v-for="(p, i) in config.patterns" :key="p" class="badge badge-outline gap-1 font-mono">
+                {{ p }}
+                <button class="text-error" @click="removePattern(i)">✕</button>
               </span>
             </div>
-            <button class="btn btn-primary btn-sm self-end" @click="saveRules">保存规则</button>
           </div>
         </div>
 

@@ -88,14 +88,14 @@ describe('analyzeXlsx', () => {
     expect(order.headers.map((h) => h.name)).toEqual(['订单号', '姓名', '手机号', '金额'])
     const byName = Object.fromEntries(order.headers.map((h) => [h.name, h]))
     expect(byName['姓名'].autoSelected).toBe(true)
-    expect(byName['姓名'].matchedRules).toContain('表头关键词：姓名')
-    expect(byName['手机号'].matchedRules).toContain('内容正则：手机号')
+    expect(byName['姓名'].matchedRules).toContain('完全匹配：姓名')
+    expect(byName['手机号'].matchedRules).toContain('完全匹配：手机号')
     expect(byName['订单号'].autoSelected).toBe(false)
 
     const hiddenSheet = sheets[1]
     expect(hiddenSheet.hidden).toBe(true)
     expect(hiddenSheet.headerRow).toBe(1)
-    expect(hiddenSheet.headers[0].autoSelected).toBe(true) // 卡号关键词 + 银行卡内容正则
+    expect(hiddenSheet.headers[0].autoSelected).toBe(true) // 卡号完全匹配关键词
   })
 
   it('表头行手动修正后重跑规则', async () => {

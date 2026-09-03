@@ -1,40 +1,47 @@
-import type { BuiltinRule, RulesConfig } from '../shared/types.js'
+import type { RulesConfig } from '../shared/types.js'
 
 /**
  * 脱敏列识别规则：
- * - 内置表头关键词（includes 匹配）
- * - 内置内容正则（对前 50 个数据行抽样；命中任一样本即整列选中）
- * - 用户自定义关键词/正则；每条内置规则可启停（disabledBuiltins 存 id）
+ * - 四类表头关键词：完全匹配 / 包含 / 开头 / 结尾（表头 trim 后比较，大小写敏感）
+ * - 自定义内容正则（对前 50 个数据行抽样；命中任一样本即整列选中）
+ * 全部词条用户在设置页增删，增删即生效；无内置预设规则。
  */
 
-export const BUILTIN_RULES: BuiltinRule[] = [
-  { id: 'kw:姓名', label: '表头关键词：姓名', kind: 'keyword', value: '姓名' },
-  { id: 'kw:身份证', label: '表头关键词：身份证', kind: 'keyword', value: '身份证' },
-  { id: 'kw:证件', label: '表头关键词：证件', kind: 'keyword', value: '证件' },
-  { id: 'kw:手机号', label: '表头关键词：手机号', kind: 'keyword', value: '手机号' },
-  { id: 'kw:电话', label: '表头关键词：电话', kind: 'keyword', value: '电话' },
-  { id: 'kw:银行卡', label: '表头关键词：银行卡', kind: 'keyword', value: '银行卡' },
-  { id: 'kw:卡号', label: '表头关键词：卡号', kind: 'keyword', value: '卡号' },
-  { id: 'kw:账号', label: '表头关键词：账号', kind: 'keyword', value: '账号' },
-  { id: 'kw:开户行', label: '表头关键词：开户行', kind: 'keyword', value: '开户行' },
-  { id: 'kw:税号', label: '表头关键词：税号', kind: 'keyword', value: '税号' },
-  {
-    id: 'kw:统一社会信用代码',
-    label: '表头关键词：统一社会信用代码',
-    kind: 'keyword',
-    value: '统一社会信用代码',
-  },
-  { id: 'kw:邮箱', label: '表头关键词：邮箱', kind: 'keyword', value: '邮箱' },
-  { id: 'kw:地址', label: '表头关键词：地址', kind: 'keyword', value: '地址' },
-  // \b 对中文文本中的 ASCII 数字串同样有效（中文字符是非 word 字符）
-  { id: 're:idcard', label: '内容正则：身份证（18 位）', kind: 'pattern', value: '\\b\\d{17}[\\dXx]\\b' },
-  { id: 're:phone', label: '内容正则：手机号', kind: 'pattern', value: '\\b1[3-9]\\d{9}\\b' },
-  { id: 're:bankcard', label: '内容正则：银行卡号（16-19 位）', kind: 'pattern', value: '\\b\\d{16,19}\\b' },
-  { id: 're:email', label: '内容正则：邮箱', kind: 'pattern', value: '[\\w.+-]+@[\\w-]+\\.[\\w.]+' },
+export const DEFAULT_EXACT_KEYWORDS = [
+  '姓名',
+  '身份证',
+  '身份证号',
+  '身份证号码',
+  '证件号',
+  '证件号码',
+  '统一社会信用代码',
+  '手机号',
+  '手机号码',
+  '电话',
+  '联系电话',
+  '电话号码',
+  '银行卡',
+  '银行卡号',
+  '卡号',
+  '账号',
+  '银行账号',
+  '开户行',
+  '开户银行',
+  '税号',
+  '邮箱',
+  '电子邮箱',
+  '地址',
+  '联系地址',
 ]
 
 export function defaultRulesConfig(): RulesConfig {
-  return { disabledBuiltins: [], customKeywords: [], customPatterns: [] }
+  return {
+    exact: [...DEFAULT_EXACT_KEYWORDS],
+    contains: [],
+    startsWith: [],
+    endsWith: [],
+    patterns: [],
+  }
 }
 
 export interface ColumnMatch {
@@ -47,34 +54,38 @@ export function matchColumns(
   sampleRows: string[][],
   config: RulesConfig,
 ): ColumnMatch[] {
-  const disabled = new Set(config.disabledBuiltins)
-  const keywords: { label: string; needle: string }[] = []
-  const patterns: { label: string; re: RegExp }[] = []
-
-  for (const rule of BUILTIN_RULES) {
-    if (disabled.has(rule.id)) continue
-    if (rule.kind === 'keyword') {
-      keywords.push({ label: rule.label, needle: rule.value })
-    } else {
-      patterns.push({ label: rule.label, re: new RegExp(rule.value) })
-    }
-  }
-  for (const kw of config.customKeywords) {
+  const matchers: { label: string; test: (header: string) => boolean }[] = []
+  for (const kw of config.exact) {
     const needle = kw.trim()
-    if (needle) keywords.push({ label: `自定义关键词：${needle}`, needle })
+    if (needle) matchers.push({ label: `完全匹配：${needle}`, test: (h) => h === needle })
   }
-  for (const src of config.customPatterns) {
+  for (const kw of config.contains) {
+    const needle = kw.trim()
+    if (needle) matchers.push({ label: `包含：${needle}`, test: (h) => h.includes(needle) })
+  }
+  for (const kw of config.startsWith) {
+    const needle = kw.trim()
+    if (needle) matchers.push({ label: `开头：${needle}`, test: (h) => h.startsWith(needle) })
+  }
+  for (const kw of config.endsWith) {
+    const needle = kw.trim()
+    if (needle) matchers.push({ label: `结尾：${needle}`, test: (h) => h.endsWith(needle) })
+  }
+
+  const patterns: { label: string; re: RegExp }[] = []
+  for (const src of config.patterns) {
     try {
-      patterns.push({ label: `自定义正则：${src}`, re: new RegExp(src) })
+      patterns.push({ label: `正则：${src}`, re: new RegExp(src) })
     } catch {
       // 保存时已校验；此处防御性跳过无效正则，不中断整列分析
     }
   }
 
-  return headers.map((header, col) => {
+  return headers.map((rawHeader, col) => {
+    const header = rawHeader.trim()
     const matchedRules: string[] = []
-    for (const { label, needle } of keywords) {
-      if (header.includes(needle)) matchedRules.push(label)
+    for (const { label, test } of matchers) {
+      if (test(header)) matchedRules.push(label)
     }
     for (const row of sampleRows) {
       const value = row[col]
