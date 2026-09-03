@@ -44,9 +44,9 @@
 
 **processXls(filePath, mode, selections, outPath, ctx, onProgress)**：
 
-- `XLSX.readFile(path, { cellDates: true, cellNF: true })` 全量读入（.xls 上限
-  65536 行 × 256 列，内存风险远低于 xlsx，全量可接受；读失败包装为中文错误，
-  对齐 `processXlsx` 风格）。
+- `XLSX.readFile(path, { cellDates: true, cellNF: true, cellStyles: true })` 全量读入
+  （.xls 上限 65536 行 × 256 列，内存风险远低于 xlsx，全量可接受；读失败包装为中文错误，
+  对齐 `processXlsx` 风格；`cellStyles` 是 biff8 解析 `!cols` 列宽的门控，见第 3 节）。
 - 逐 sheet 遍历 range（`XLSX.utils.decode_range(ws['!ref'])`，空 sheet 无 `!ref` 跳过）：
   - **加密**：跳过表头行（`selection.headerRow`）、已有 `E2:` 前缀格、
     非 文本/数字/日期 格（布尔 `t:'b'`、错误 `t:'e'`、空 `t:'z'` 跳过，
@@ -77,8 +77,9 @@
   （Label/SST 均为 UTF-16LE）。
 - **ESM 构建不自动加载 fs**：`readFile`/`writeFile` 依赖 `XLSX.set_fs(fs)` 注入
   （`import * as XLSX from 'xlsx'`，ESM 命名导出与 d.ts 一致，运行时/类型两侧都稳）。
-- **已验证可保留**：`!cols` 列宽（COLINFO）、`!merges` 合并单元格（MergeCells）、
-  sheet 隐藏状态（BoundSheet8 的 Hidden 位）、`cell.z` 数字格式（cellNF 读入后随
+- **已验证可保留**：`!cols` 列宽（COLINFO；**biff8 解析它被 `cellStyles` 选项门控**，
+  读入必须带 `cellStyles: true`）、`!merges` 合并单元格（MergeCells，解析无门控）、
+  sheet 隐藏状态（BoundSheet8 的 Hidden 位）、`cell.z` 数字格式（`cellNF` 读入后随
   XF 写回）。均由往返单测固化。
 
 ### 4. 触点改动
