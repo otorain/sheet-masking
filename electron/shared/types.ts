@@ -1,6 +1,6 @@
 // 主进程与渲染进程共享的 IPC 类型。纯 interface/type，双方都用 `import type` 引用，
 // 转译后无运行时产物（vite-plugin-electron 逐文件转译，不会生成此文件）。
-export type FileKind = 'xlsx' | 'csv'
+export type FileKind = 'xlsx' | 'xls' | 'csv'
 export type ProcessMode = 'encrypt' | 'decrypt'
 
 export interface SheetHeaderInfo {

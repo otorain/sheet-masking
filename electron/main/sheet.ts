@@ -30,8 +30,9 @@ export const YIELD_EVERY_ROWS = 500
 export function kindFromPath(filePath: string): FileKind {
   const ext = path.extname(filePath).toLowerCase()
   if (ext === '.xlsx') return 'xlsx'
+  if (ext === '.xls') return 'xls'
   if (ext === '.csv') return 'csv'
-  throw new Error(`不支持的文件格式：${ext || filePath}（仅支持 .xlsx / .csv）`)
+  throw new Error(`不支持的文件格式：${ext || filePath}（仅支持 .xlsx / .xls / .csv）`)
 }
 
 export async function analyzeFile(
