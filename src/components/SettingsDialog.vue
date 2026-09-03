@@ -137,85 +137,87 @@ function onReset() {
 
 <template>
   <dialog ref="dialog" class="modal">
-    <div class="modal-box max-h-[85vh] max-w-2xl space-y-4 overflow-y-auto">
-      <h3 class="text-lg font-bold">设置</h3>
+    <div class="modal-box flex max-h-[85vh] max-w-2xl flex-col">
+      <div class="shrink-0 space-y-4">
+        <h3 class="text-lg font-bold">设置</h3>
+        <div v-if="errorMsg" class="alert alert-error">{{ errorMsg }}</div>
+        <div v-if="okMsg" class="alert alert-success">{{ okMsg }}</div>
+      </div>
 
-      <div v-if="errorMsg" class="alert alert-error">{{ errorMsg }}</div>
-      <div v-if="okMsg" class="alert alert-success">{{ okMsg }}</div>
+      <div class="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto">
+        <template v-if="loaded">
+          <div class="card bg-base-200">
+            <div class="card-body">
+              <h2 class="card-title">表头关键词</h2>
+              <p class="text-xs opacity-60">增删立即生效，无需保存</p>
+              <div v-for="section in KEYWORD_SECTIONS" :key="section.kind" class="space-y-1">
+                <h3 class="text-sm font-semibold">{{ section.title }}</h3>
+                <div class="join w-full">
+                  <input
+                    v-model="newKeyword[section.kind]"
+                    class="input input-bordered input-sm join-item w-full"
+                    :placeholder="section.placeholder"
+                    @keyup.enter="addKeyword(section.kind)"
+                  >
+                  <button class="btn btn-sm join-item" @click="addKeyword(section.kind)">添加</button>
+                </div>
+                <div class="flex flex-wrap gap-1">
+                  <span v-for="(kw, i) in config[section.kind]" :key="kw" class="badge badge-outline gap-1">
+                    {{ kw }}
+                    <button class="cursor-pointer text-error" @click="askDelete(section.kind, i, kw)">✕</button>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
 
-      <template v-if="loaded">
-        <div class="card bg-base-200">
-          <div class="card-body">
-            <h2 class="card-title">表头关键词</h2>
-            <p class="text-xs opacity-60">增删立即生效，无需保存</p>
-            <div v-for="section in KEYWORD_SECTIONS" :key="section.kind" class="space-y-1">
-              <h3 class="text-sm font-semibold">{{ section.title }}</h3>
+          <div class="card bg-base-200">
+            <div class="card-body">
+              <h2 class="card-title">内容正则（高级）</h2>
+              <p class="text-xs opacity-60">对每列前 50 行内容抽样匹配，命中即整列自动勾选</p>
               <div class="join w-full">
                 <input
-                  v-model="newKeyword[section.kind]"
-                  class="input input-bordered input-sm join-item w-full"
-                  :placeholder="section.placeholder"
-                  @keyup.enter="addKeyword(section.kind)"
+                  v-model="newPattern"
+                  class="input input-bordered input-sm join-item w-full font-mono"
+                  placeholder="如：^ORD-\d+$"
+                  @keyup.enter="addPattern"
                 >
-                <button class="btn btn-sm join-item" @click="addKeyword(section.kind)">添加</button>
+                <button class="btn btn-sm join-item" @click="addPattern">添加</button>
               </div>
               <div class="flex flex-wrap gap-1">
-                <span v-for="(kw, i) in config[section.kind]" :key="kw" class="badge badge-outline gap-1">
-                  {{ kw }}
-                  <button class="text-error" @click="askDelete(section.kind, i, kw)">✕</button>
+                <span v-for="(p, i) in config.patterns" :key="p" class="badge badge-outline gap-1 font-mono">
+                  {{ p }}
+                  <button class="cursor-pointer text-error" @click="askDelete('patterns', i, p)">✕</button>
                 </span>
               </div>
             </div>
           </div>
-        </div>
 
-        <div class="card bg-base-200">
-          <div class="card-body">
-            <h2 class="card-title">内容正则（高级）</h2>
-            <p class="text-xs opacity-60">对每列前 50 行内容抽样匹配，命中即整列自动勾选</p>
-            <div class="join w-full">
-              <input
-                v-model="newPattern"
-                class="input input-bordered input-sm join-item w-full font-mono"
-                placeholder="如：^ORD-\d+$"
-                @keyup.enter="addPattern"
-              >
-              <button class="btn btn-sm join-item" @click="addPattern">添加</button>
-            </div>
-            <div class="flex flex-wrap gap-1">
-              <span v-for="(p, i) in config.patterns" :key="p" class="badge badge-outline gap-1 font-mono">
-                {{ p }}
-                <button class="text-error" @click="askDelete('patterns', i, p)">✕</button>
-              </span>
+          <div class="card bg-base-200">
+            <div class="card-body">
+              <h2 class="card-title">修改密码</h2>
+              <div class="alert alert-warning text-sm">
+                注意：修改密码后，此前用旧密码脱敏的所有文件将无法再还原。请先还原所有文件，再修改密码。
+              </div>
+              <input v-model="oldPassword" type="password" class="input input-bordered input-sm w-full" placeholder="原密码">
+              <input v-model="newPassword" type="password" class="input input-bordered input-sm w-full" placeholder="新密码">
+              <input v-model="newPassword2" type="password" class="input input-bordered input-sm w-full" placeholder="确认新密码">
+              <div class="flex items-center justify-between">
+                <button class="btn btn-warning btn-sm" @click="submitChangePassword">修改密码</button>
+                <ResetPassword label="忘记原密码？重置" @reset="onReset" />
+              </div>
             </div>
           </div>
+        </template>
+        <div v-else class="flex justify-center p-8">
+          <span class="loading loading-spinner loading-lg" />
         </div>
-
-        <div class="card bg-base-200">
-          <div class="card-body">
-            <h2 class="card-title">修改密码</h2>
-            <div class="alert alert-warning text-sm">
-              注意：修改密码后，此前用旧密码脱敏的所有文件将无法再还原。请先还原所有文件，再修改密码。
-            </div>
-            <input v-model="oldPassword" type="password" class="input input-bordered input-sm w-full" placeholder="原密码">
-            <input v-model="newPassword" type="password" class="input input-bordered input-sm w-full" placeholder="新密码">
-            <input v-model="newPassword2" type="password" class="input input-bordered input-sm w-full" placeholder="确认新密码">
-            <div class="flex items-center justify-between">
-              <button class="btn btn-warning btn-sm" @click="submitChangePassword">修改密码</button>
-              <ResetPassword label="忘记原密码？重置" @reset="onReset" />
-            </div>
-          </div>
-        </div>
-      </template>
-      <div v-else class="flex justify-center p-8">
-        <span class="loading loading-spinner loading-lg" />
       </div>
 
-      <div class="modal-action">
+      <div class="modal-action shrink-0">
         <button class="btn" @click="dialog?.close()">关闭</button>
       </div>
     </div>
-    <form method="dialog" class="modal-backdrop"><button>关闭</button></form>
   </dialog>
 
   <dialog ref="confirmDialog" class="modal">
