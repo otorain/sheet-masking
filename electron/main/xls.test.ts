@@ -152,8 +152,10 @@ describe('processXls 加密→还原往返', () => {
     // 保真：数字格式/合并/列宽与原文件一致（同一读写链，深度相等即未丢）
     const sws = readWb(src).Sheets['订单']
     expect(dws['D3'].z).toBe('0.00')
+    expect(dws['E3'].z).toBe('yyyy-mm-dd') // 被加解密格本身的数字格式同样保留
     expect(dws['!merges']).toEqual(sws['!merges'])
     expect(dws['!cols']).toEqual(sws['!cols'])
+    expect(dwb.Workbook?.Sheets?.[1]?.Hidden).toBe(1) // 隐藏状态往返保留
   })
 
   it('密码错误：第一个 E2 格即失败，整体中止', async () => {
