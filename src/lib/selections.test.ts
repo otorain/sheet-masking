@@ -49,7 +49,7 @@ describe('mergeSelections', () => {
     ])
 
     const merged = mergeSelections(prev, next, prevSel)
-    expect(merged.订单.cols).toEqual([1, 2, 4, 3])
+    expect(merged.订单.cols).toEqual([1, 2, 3, 4])
   })
 
   it('手动取消的旧命中列不被重新勾上（只补真正新命中的列）', () => {
@@ -70,6 +70,29 @@ describe('mergeSelections', () => {
 
     const merged = mergeSelections(prev, next, prevSel)
     expect(merged.订单.cols).toEqual([3])
+  })
+
+  it('规则移除后，此前自动勾选的列自动取消勾选；手动勾选的保留', () => {
+    const prev = analysis([
+      sheet('订单', [
+        [1, '日期', false],
+        [2, '工号', true],
+        [3, '姓名', true],
+      ]),
+    ])
+    // 用户手动加勾了 1，保留了自动命中的 2、3
+    const prevSel = { 订单: { headerRow: 1, cols: [1, 2, 3] } }
+    // 移除「工号」关键词后，2 不再自动命中
+    const next = analysis([
+      sheet('订单', [
+        [1, '日期', false],
+        [2, '工号', false],
+        [3, '姓名', true],
+      ]),
+    ])
+
+    const merged = mergeSelections(prev, next, prevSel)
+    expect(merged.订单.cols).toEqual([1, 3])
   })
 
   it('新 sheet 按自动命中全选；消失的 sheet 被丢弃；headerRow 取新分析值', () => {
