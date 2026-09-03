@@ -16,6 +16,8 @@ const KEYWORD_SECTIONS: { kind: KeywordKind; title: string; placeholder: string 
 ]
 
 const dialog = ref<HTMLDialogElement | null>(null)
+const confirmDialog = ref<HTMLDialogElement | null>(null)
+const pendingDelete = ref<{ kind: KeywordKind | 'patterns'; index: number; value: string } | null>(null)
 const config = ref<RulesConfig>({ exact: [], contains: [], startsWith: [], endsWith: [], patterns: [] })
 const newKeyword = ref<Record<KeywordKind, string>>({
   exact: '',
@@ -71,9 +73,21 @@ function addKeyword(kind: KeywordKind) {
   newKeyword.value[kind] = ''
 }
 
-function removeKeyword(kind: KeywordKind, index: number) {
-  config.value[kind].splice(index, 1)
-  applyRules()
+/** 点 ✕ 不直接删除：先弹确认框 */
+function askDelete(kind: KeywordKind | 'patterns', index: number, value: string) {
+  pendingDelete.value = { kind, index, value }
+  confirmDialog.value?.showModal()
+}
+
+/** 确认删除：从对应数组移除并立即生效 */
+function confirmDelete() {
+  const target = pendingDelete.value
+  if (target) {
+    config.value[target.kind].splice(target.index, 1)
+    applyRules()
+  }
+  pendingDelete.value = null
+  confirmDialog.value?.close()
 }
 
 function addPattern() {
@@ -90,11 +104,6 @@ function addPattern() {
     applyRules()
   }
   newPattern.value = ''
-}
-
-function removePattern(index: number) {
-  config.value.patterns.splice(index, 1)
-  applyRules()
 }
 
 async function submitChangePassword() {
@@ -153,7 +162,7 @@ function onReset() {
               <div class="flex flex-wrap gap-1">
                 <span v-for="(kw, i) in config[section.kind]" :key="kw" class="badge badge-outline gap-1">
                   {{ kw }}
-                  <button class="text-error" @click="removeKeyword(section.kind, i)">✕</button>
+                  <button class="text-error" @click="askDelete(section.kind, i, kw)">✕</button>
                 </span>
               </div>
             </div>
@@ -176,7 +185,7 @@ function onReset() {
             <div class="flex flex-wrap gap-1">
               <span v-for="(p, i) in config.patterns" :key="p" class="badge badge-outline gap-1 font-mono">
                 {{ p }}
-                <button class="text-error" @click="removePattern(i)">✕</button>
+                <button class="text-error" @click="askDelete('patterns', i, p)">✕</button>
               </span>
             </div>
           </div>
@@ -207,5 +216,19 @@ function onReset() {
       </div>
     </div>
     <form method="dialog" class="modal-backdrop"><button>关闭</button></form>
+  </dialog>
+
+  <dialog ref="confirmDialog" class="modal">
+    <div class="modal-box">
+      <h3 class="text-lg font-bold">确认删除</h3>
+      <p class="py-4">
+        确认删除{{ pendingDelete?.kind === 'patterns' ? '正则' : '关键词' }}「{{ pendingDelete?.value }}」？
+      </p>
+      <div class="modal-action">
+        <button class="btn" @click="confirmDialog?.close()">取消</button>
+        <button class="btn btn-error" @click="confirmDelete()">删除</button>
+      </div>
+    </div>
+    <form method="dialog" class="modal-backdrop"><button>取消</button></form>
   </dialog>
 </template>
