@@ -1,0 +1,104 @@
+# .xls 文件支持设计
+
+日期：2026-09-03
+状态：已与用户确认（方案 A：SheetJS CDN 依赖；加解密 .xls 输出仍为 .xls 格式不变；不做 spike）
+
+## 背景
+
+工具当前支持 .xlsx（ExcelJS）与 .csv（fast-csv + iconv-lite）。需增加老二进制格式 .xls
+（BIFF5/BIFF8）。ExcelJS 不支持 .xls；JS 生态中唯一能自持读写 .xls 的库是 SheetJS（`xlsx` 包）。
+
+两项已确认决策：
+
+- **依赖来源（方案 A）**：SheetJS 官方 CDN tarball
+  `"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"`。npm registry 上的
+  `xlsx@0.18.5`（2022 年）有未修复的 CVE-2023-30533（原型污染）/ CVE-2024-22363（ReDoS），
+  SheetJS 官方新版只发自己 CDN；本工具解析外部来源文件，需修复版。
+- **输出格式**：加密 .xls 输出仍为 .xls，解密对称输出 .xls，往返格式不变。
+  代价：SheetJS 社区版写文件不保留单元格样式（字体/填充/边框丢失），用户已接受。
+
+## 设计
+
+### 1. 依赖
+
+- `package.json` dependencies 加 `"xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"`
+  （必须在 dependencies：electron-builder 只打包运行时依赖；xlsx 无构建脚本，
+  无需动 `pnpm-workspace.yaml` 的 allowBuilds）。
+- 主进程 `import * as XLSX from 'xlsx'`（exceljs/fast-csv 之外的第三条文件通道）。
+
+### 2. 新模块 `electron/main/xls.ts`
+
+与 `csv.ts` 平级，导出 `analyzeXls` / `processXls`，复用 `sheet.ts` 已导出的
+`detectHeaderRow` / `buildAnalysis` / `HEADER_CANDIDATE_ROWS` / `SAMPLE_DATA_ROWS` /
+`YIELD_EVERY_ROWS` 与 `crypto.ts` 全套 payload 函数。
+
+**analyzeXls(filePath, rules, headerRowOverrides)**：
+
+- `XLSX.readFile(path, { sheetRows: HEADER_CANDIDATE_ROWS + SAMPLE_DATA_ROWS })`
+  每 sheet 限量解析（对齐 xlsx analyze 只读前 55 行的行为）。
+- 每个 sheet：`XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' })`
+  得稠密行，值归一化为文本（Date→ISO 字符串、number/boolean→String、其余→''，
+  与 xlsx analyze 的 `streamCellText` 语义一致；日期以原始数字出现可接受）。
+- 隐藏 sheet：`wb.Workbook?.Sheets?.[i]?.Hidden` 为 1 或 2 → `hidden: true`。
+- 表头行：`headerRowOverrides[sheetName] ?? detectHeaderRow(denseRows)`，然后 `buildAnalysis`。
+
+**processXls(filePath, mode, selections, outPath, ctx, onProgress)**：
+
+- `XLSX.readFile(path, { cellDates: true, cellNF: true })` 全量读入（.xls 上限
+  65536 行 × 256 列，内存风险远低于 xlsx，全量可接受；读失败包装为中文错误，
+  对齐 `processXlsx` 风格）。
+- 逐 sheet 遍历 range（`XLSX.utils.decode_range(ws['!ref'])`，空 sheet 无 `!ref` 跳过）：
+  - **加密**：跳过表头行（`selection.headerRow`）、公式格（`cell.f` 存在）、
+    已有 `E2:` 前缀格、非 文本/数字/日期 格（布尔 `t:'b'`、错误 `t:'e'`、空 `t:'z'` 跳过，
+    对齐 `valueToPayload` 语义）。命中格：`cell.v = encryptPayload(...)`、`cell.t = 's'`、
+    删 `cell.w`（格式化文本缓存），保留 `cell.z`（数字格式）。
+  - **解密**：全 range 扫 `E2:` 前缀，与列位置无关；第一个密文格校验失败 →
+    抛「密码不符或文件被篡改」整体中止；个别失败记录 `sheet名!A1` 地址进
+    `failedCells` 继续（对齐 `processXlsx`）。
+  - 还原写回：`'s'`→`t:'s'`；`'n'`→`t:'n'`；`'d'`→`t:'d'` + Date 对象（保留原 `cell.z`
+    日期格式），同样删 `cell.w`。
+- 合并单元格 `!merges`、列宽 `!cols` 等在 workbook 对象上原样不动，写回自然保留。
+- 进度：按已处理行数 `onProgress`，每 `YIELD_EVERY_ROWS` 行 `setImmediate` 让出事件循环。
+- 写回：`XLSX.writeFile(wb, outPath, { bookType: 'biff8', cellDates: true })`
+  （BIFF5 及更老文件读入后统一写成 BIFF8）。
+
+### 3. 触点改动
+
+- `electron/shared/types.ts`：`FileKind` 加 `'xls'`。
+- `electron/main/sheet.ts`：`kindFromPath` 认 `.xls`（报错文案改「仅支持 .xlsx / .xls / .csv」）；
+  `analyzeFile` / `processFile` 加 xls 分支（selections 仍按 sheet 名索引，与 xlsx 一致）。
+- `electron/main/index.ts`：打开 dialog filters 加 `xls`；输出扩展名由 kind 推导（`'.' + kind`，
+  xlsx/xls/csv 一一对应）。
+- `src/components/MainFlow.vue`：按钮文案「选择文件（.xlsx / .csv）」加 `.xls`。其余零改动
+  （UI 无 kind 分支）。
+
+### 4. 已知限制（README 补充）
+
+- .xls 经 SheetJS 读写：**单元格样式（字体/填充/边框）丢失**（社区版不写样式）；
+  图表/图片/透视表丢失（与 xlsx 现状一致）；BIFF5 及更老格式统一写成 BIFF8。
+- 列宽/合并单元格/数字格式保留（workbook 对象不动，由往返单测固化验证）。
+
+## 不做（YAGNI）
+
+- .xlsb / .ods 等 SheetJS 顺带可读的其他格式（只放通 .xls）。
+- 样式保留（SheetJS 社区版能力边界；Pro 版为付费软件）。
+- 保真 spike（用户明确跳过；保真边界由单测直接验证并固化）。
+- 流式处理 .xls（行上限 65536，全量加载足够）。
+
+## 测试
+
+新增 `electron/main/xls.test.ts`，用 SheetJS 在临时目录写真 .xls fixture
+（`XLSX.writeFile(bookType: 'biff8')`），对齐 `sheet.test.ts` 场景子集：
+
+- analyze：表头自动探测、headerRowOverrides、隐藏 sheet 标注
+- 加密→还原往返：文本/数字/日期类型不变、非选中列不动、表头行不动
+- 确定性：同明文两次加密密文相同
+- 错误密码首格即抛「密码不符或文件被篡改」；篡改密文记录 failedCells
+- 公式格跳过（skippedFormulas 计数）；空列选择整 sheet 跳过
+- 保真断言：合并单元格、列宽、数字格式（如 `0.00`）往返保留
+- `kindFromPath` 补 `.xls` 用例（含大小写 `.XLS`）
+
+## 验证
+
+`pnpm exec vitest run` + `pnpm exec vue-tsc --noEmit` +
+`pnpm exec tsc --noEmit -p tsconfig.node.json` + `pnpm exec vite build` 全绿。
