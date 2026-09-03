@@ -5,7 +5,8 @@ import ExcelJS from 'exceljs'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { generateSalt, initCrypto, isEncrypted } from './crypto.js'
 import { defaultRulesConfig } from './rules.js'
-import { analyzeXlsx, detectHeaderRow, processXlsx } from './sheet.js'
+import { detectHeaderRow } from './analysis.js'
+import { analyzeXlsx, processXlsx } from './sheet.js'
 
 const rules = defaultRulesConfig()
 const ctx = initCrypto('test-password', generateSalt())

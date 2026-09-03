@@ -11,12 +11,11 @@ import {
   type CryptoContext,
 } from './crypto.js'
 import {
+  MAX_READ_ROWS,
+  YIELD_EVERY_ROWS,
   buildAnalysis,
   detectHeaderRow,
-  HEADER_CANDIDATE_ROWS,
-  SAMPLE_DATA_ROWS,
-  YIELD_EVERY_ROWS,
-} from './sheet.js'
+} from './analysis.js'
 import type {
   ProcessMode,
   ProcessSummary,
@@ -30,8 +29,6 @@ import type {
  * - 读：检测 GBK（无 BOM 且 UTF-8 解码失败）→ iconv-lite 转 UTF-8
  * - 写：UTF-8 带 BOM + CRLF 行尾（Windows 版 Excel 直接双击不乱码）
  */
-
-const MAX_READ_ROWS = HEADER_CANDIDATE_ROWS + SAMPLE_DATA_ROWS
 
 export async function detectCsvEncoding(filePath: string): Promise<'utf8' | 'gbk'> {
   const handle = await fs.promises.open(filePath, 'r')
