@@ -150,13 +150,16 @@ export function getCryptoContext(): CryptoContext {
 }
 
 export function getRulesConfig(): RulesConfig {
-  return readStored()?.rules ?? defaultRulesConfig()
+  const rules = readStored()?.rules
+  // 旧格式（disabledBuiltins/customKeywords 时代）无 exact 字段：不迁移，直接重置为默认
+  if (!rules || !Array.isArray(rules.exact)) return defaultRulesConfig()
+  return rules
 }
 
 export function saveRulesConfig(config: RulesConfig): void {
   const stored = readStored()
   if (!stored) throw new Error('请先设置主密码')
-  for (const src of config.customPatterns) {
+  for (const src of config.patterns) {
     try {
       new RegExp(src)
     } catch {
