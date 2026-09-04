@@ -41,10 +41,12 @@ function buildFixture(filePath: string): void {
     ['订单号', '姓名', '手机号', '金额', '入职日期'],
     ['A001', '张三', '13800138000', 100.5],
     ['A002', '李四', '13900139000', 200],
+    // A5 合并主格须进 aoa：aoa_to_sheet 之后手动赋值不会更新 !ref，
+    // SheetJS 写文件按 !ref 取格，范围外的单元格会被静默丢弃
+    ['合并备注'],
   ])
   ws['E3'] = { t: 'd', v: new Date('2026-01-15T00:00:00.000Z'), z: 'yyyy-mm-dd' }
   ws['D3'].z = '0.00'
-  ws['A5'] = { t: 's', v: '合并备注' }
   ws['!merges'] = [XLSX.utils.decode_range('A5:B5')]
   ws['!cols'] = [{ wch: 20 }]
   XLSX.utils.book_append_sheet(wb, ws, '订单')
@@ -156,6 +158,35 @@ describe('processXls 加密→还原往返', () => {
     expect(dws['!merges']).toEqual(sws['!merges'])
     expect(dws['!cols']).toEqual(sws['!cols'])
     expect(dwb.Workbook?.Sheets?.[1]?.Hidden).toBe(1) // 隐藏状态往返保留
+  })
+
+  it('表头以上的标题/注释行不加密（选中列含第 1 列）', async () => {
+    const src = path.join(dir, 'above-header.xls')
+    buildFixture(src)
+    const enc = path.join(dir, 'above-header-enc.xls')
+    // 选中列含第 1 列：A1 大标题落在选中列，但属于表头以上，不加密
+    const summary = await processXls(
+      src,
+      'encrypt',
+      { 订单: { headerRow: 2, cols: [1] } },
+      enc,
+      ctx,
+      () => {},
+    )
+    expect(summary.processedCells).toBe(3) // A3/A4/A5（A5 合并主格，表头以下照常加密）
+
+    const ws = readWb(enc).Sheets['订单']
+    expect(ws['A1'].v).toBe('订单报表（导出）') // 表头以上的标题不加密
+    expect(ws['A2'].v).toBe('订单号') // 表头行不加密
+    expect(isEncrypted(ws['A3'].v)).toBe(true) // 表头以下数据加密
+    expect(isEncrypted(ws['A4'].v)).toBe(true)
+
+    // 还原后与原文一致
+    const dec = path.join(dir, 'above-header-dec.xls')
+    await processXls(enc, 'decrypt', {}, dec, ctx, () => {})
+    const dws = readWb(dec).Sheets['订单']
+    expect(dws['A3'].v).toBe('A001')
+    expect(dws['A5'].v).toBe('合并备注')
   })
 
   it('密码错误：第一个 E2 格即失败，整体中止', async () => {

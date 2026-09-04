@@ -121,8 +121,8 @@ export async function processXls(
       continue
     }
     for (let r = range.s.r; r <= range.e.r; r++) {
-      // 加密跳过表头行：表头列名不是敏感数据，且保持已脱敏文件可再次分析
-      if (mode === 'encrypt' && selection && r + 1 === selection.headerRow) {
+      // 加密跳过表头行及以上行：表头列名与上方标题/注释都不是敏感数据，且保持已脱敏文件可再次分析
+      if (mode === 'encrypt' && selection && r + 1 <= selection.headerRow) {
         doneRows++
         continue
       }
