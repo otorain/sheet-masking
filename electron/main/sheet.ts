@@ -155,8 +155,8 @@ export async function processXlsx(
     const rows: ExcelJS.Row[] = []
     ws.eachRow({ includeEmpty: false }, (row) => rows.push(row))
     for (const row of rows) {
-      // 加密跳过表头行：表头列名不是敏感数据，且保持已脱敏文件可再次分析
-      if (mode === 'encrypt' && selection && row.number === selection.headerRow) {
+      // 加密跳过表头行及以上行：表头列名与上方标题/注释都不是敏感数据，且保持已脱敏文件可再次分析
+      if (mode === 'encrypt' && selection && row.number <= selection.headerRow) {
         doneRows++
         continue
       }

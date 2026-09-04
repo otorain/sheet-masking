@@ -191,6 +191,39 @@ describe('processXlsx 加密→还原往返', () => {
     expect(dwb.getWorksheet('隐藏表')!.getCell('A2').value).toBe('6222020200112233')
   })
 
+  it('表头以上的标题/注释行不加密（选中列含第 1 列）', async () => {
+    const src = path.join(dir, 'above-header.xlsx')
+    await buildFixture(src)
+    const enc = path.join(dir, 'above-header-enc.xlsx')
+    // 选中列含第 1 列：A1 大标题落在选中列，但属于表头以上，不加密
+    const summary = await processXlsx(
+      src,
+      'encrypt',
+      { 订单: { headerRow: 2, cols: [1] } },
+      enc,
+      ctx,
+      () => {},
+    )
+    expect(summary.processedCells).toBe(3) // A3/A4/A5（A5 合并主格，表头以下照常加密）
+
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.readFile(enc)
+    const ws = wb.getWorksheet('订单')!
+    expect(ws.getCell('A1').value).toBe('订单报表（导出）') // 表头以上的标题不加密
+    expect(ws.getCell('A2').value).toBe('订单号') // 表头行不加密
+    expect(isEncrypted(ws.getCell('A3').value)).toBe(true) // 表头以下数据加密
+    expect(isEncrypted(ws.getCell('A4').value)).toBe(true)
+
+    // 还原后与原文一致
+    const dec = path.join(dir, 'above-header-dec.xlsx')
+    await processXlsx(enc, 'decrypt', {}, dec, ctx, () => {})
+    const dwb = new ExcelJS.Workbook()
+    await dwb.xlsx.readFile(dec)
+    const dws = dwb.getWorksheet('订单')!
+    expect(dws.getCell('A3').value).toBe('A001')
+    expect(dws.getCell('A5').value).toBe('合并备注')
+  })
+
   it('密码错误：第一个 ENC1 格即失败，整体中止', async () => {
     const src = path.join(dir, 'wrongpw.xlsx')
     const enc = path.join(dir, 'wrongpw-enc.xlsx')
