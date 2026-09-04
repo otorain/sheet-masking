@@ -6,7 +6,7 @@ import * as XLSX from 'xlsx'
 import { generateSalt, initCrypto, isEncrypted } from './crypto.js'
 import { defaultRulesConfig } from './rules.js'
 import { kindFromPath } from './sheet.js'
-import { analyzeXls, processXls } from './xls.js'
+import { analyzeXls, processXls, sanitizeXlsProps } from './xls.js'
 
 // 与 xls.ts 同理：xlsx 的 ESM 构建需手动注入 fs 才能 readFile/writeFile
 XLSX.set_fs(fs)
@@ -227,5 +227,99 @@ describe('processXls 加密→还原往返', () => {
     expect(isEncrypted(readWb(enc2).Sheets['备注表']['B2'].v)).toBe(true)
     await processXls(enc2, 'decrypt', {}, dec, ctx, () => {})
     expect(readWb(dec).Sheets['备注表']['B2'].v).toBe(longText)
+  })
+})
+
+describe('sanitizeXlsProps', () => {
+  it('剔除写出器不支持的属性（Locale/Behavior/undefined），保留其余元数据', () => {
+    const wb = XLSX.utils.book_new()
+    wb.Props = {
+      Title: '报表',
+      Author: 'hope',
+      Locale: 2052,
+      Behavior: 1,
+    } as XLSX.Properties
+    ;(wb.Props as Record<string, unknown>)['undefined'] = 2052
+    wb.Custprops = { Locale: 2052 } as unknown as XLSX.FullProperties
+
+    sanitizeXlsProps(wb)
+
+    expect(wb.Props).toEqual({ Title: '报表', Author: 'hope' })
+    expect(wb.Custprops).toEqual({})
+  })
+
+  it('Props/Custprops 缺失时不报错', () => {
+    expect(() => sanitizeXlsProps(XLSX.utils.book_new())).not.toThrow()
+  })
+})
+
+describe('processXls 兼容 WPS 文件属性', () => {
+  /** 手搓 SummaryInformation 属性流（CodePage=1200 + Locale(VT_UI4)=2052），
+   *  模拟 WPS 文件：SheetJS 读取后 Props.Locale 为 VT_UI4 数字，
+   *  其 CFB 写出器不支持该类型，不剔除会在 writeFile 抛
+   *  "TypedPropertyValue unrecognized type 19 2052" */
+  function buildWpsPropsFixture(filePath: string): void {
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(
+      wb,
+      XLSX.utils.aoa_to_sheet([
+        ['姓名', '手机号'],
+        ['张三', '13800138000'],
+      ]),
+      '订单',
+    )
+    const plain = XLSX.write(wb, { bookType: 'biff8', bookSST: true, type: 'buffer' }) as Buffer
+
+    const si = Buffer.alloc(48 + 40)
+    let o = 0
+    si.writeUInt16LE(0xfffe, o); o += 2 // byte order
+    si.writeUInt16LE(0, o); o += 2 // version
+    o += 4 // SystemIdentifier
+    o += 16 // CLSID（全零 HEADER_CLSID，解析放行）
+    si.writeUInt32LE(1, o); o += 4 // NumSets
+    o += 16 // FMTID0（解析只记录不校验）
+    si.writeUInt32LE(48, o); o += 4 // Offset0
+    si.writeUInt32LE(40, o); o += 4 // PropertySet size
+    si.writeUInt32LE(2, o); o += 4 // NumProps
+    si.writeUInt32LE(1, o); o += 4 // PID 1 = CodePage
+    si.writeUInt32LE(24, o); o += 4
+    si.writeUInt32LE(0x80000000, o); o += 4 // PID Locale
+    si.writeUInt32LE(32, o); o += 4
+    si.writeUInt16LE(0x02, o); o += 2 // VT_I2
+    si.writeUInt16LE(0, o); o += 2
+    si.writeUInt16LE(1200, o); o += 2
+    si.writeUInt16LE(0, o); o += 2
+    si.writeUInt16LE(0x13, o); o += 2 // VT_UI4
+    si.writeUInt16LE(0, o); o += 2
+    si.writeUInt32LE(2052, o); o += 4
+
+    const cfb = XLSX.CFB.read(plain, { type: 'buffer' })
+    XLSX.CFB.utils.cfb_add(cfb, '/SummaryInformation', si)
+    fs.writeFileSync(filePath, XLSX.CFB.write(cfb, { type: 'buffer' }))
+  }
+
+  it('带 VT_UI4 Locale 属性的文件加密→还原全流程成功', async () => {
+    const src = path.join(dir, 'wps-props.xls')
+    buildWpsPropsFixture(src)
+    // 前置条件：fixture 读取后确带 Locale 属性（否则测试没覆盖到崩溃路径）
+    expect((XLSX.readFile(src).Props as Record<string, unknown>)?.Locale).toBe(2052)
+
+    const enc = path.join(dir, 'wps-props-enc.xls')
+    const dec = path.join(dir, 'wps-props-dec.xls')
+    const summary = await processXls(
+      src,
+      'encrypt',
+      { 订单: { headerRow: 1, cols: [1, 2] } },
+      enc,
+      ctx,
+      () => {},
+    )
+    expect(summary.processedCells).toBe(2)
+    expect(isEncrypted(readWb(enc).Sheets['订单']['A2'].v)).toBe(true)
+
+    await processXls(enc, 'decrypt', {}, dec, ctx, () => {})
+    const dws = readWb(dec).Sheets['订单']
+    expect(dws['A2'].v).toBe('张三')
+    expect(dws['B2'].v).toBe('13800138000')
   })
 })

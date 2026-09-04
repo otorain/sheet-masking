@@ -61,6 +61,10 @@ AES-256-GCM 可逆加密。从 electron-vite-vue 模板改造，pnpm 11.3.0 管�
   只发 cdn.sheetjs.com，install 需可达）；其 ESM 构建不自动加载 node:fs，
   readFile/writeFile 前必须 `XLSX.set_fs(fs)`；biff8 写回不保留公式与样式，
   且必须带 `bookSST: true` 否则字符串按 255 字符截断
+- SheetJS 的 CFB 属性集写出器不支持 VT_UI4：WPS 产的 .xls 带 `Locale`/`Behavior`
+  属性（及字典解析产生的 `undefined` 伪属性），writeFile 会抛
+  `TypedPropertyValue unrecognized type 19 2052`——`processXls` 写前过
+  `sanitizeXlsProps()` 剔除
 
 ## 工作流约定
 

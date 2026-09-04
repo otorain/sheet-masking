@@ -98,6 +98,10 @@
   **公式退化为静态缓存值**（选中列的缓存值照常脱敏）；图表/图片/透视表丢失
   （与 xlsx 现状一致）；BIFF5 及更老格式统一写成 BIFF8。
 - 列宽/合并单元格/数字格式保留（workbook 对象不动，由往返单测固化验证）。
+- 文件元数据中的 `Locale`/`Behavior` 属性（VT_UI4，WPS 文件常见）及名为
+  `undefined` 的伪属性（WPS 自定义属性字典解析产物）在写回前剔除：SheetJS 的
+  CFB 属性写出器不支持这些类型，不剔除会抛 `TypedPropertyValue unrecognized type`。
+  仅影响文件属性面板元数据，不影响单元格数据。
 
 ## 不做（YAGNI）
 
@@ -117,6 +121,8 @@
 - 错误密码首格即抛「密码不符或文件被篡改」；篡改密文记录 failedCells
 - 空列选择整 sheet 跳过；超长文本（>255 字符）往返不截断（验证 `bookSST`）
 - 保真断言：合并单元格、列宽、数字格式（如 `0.00`）往返保留
+- WPS 属性兼容：手搓含 VT_UI4 `Locale` 属性的 SummaryInformation 流注入 fixture，
+  加密→还原全流程成功；`sanitizeXlsProps` 单测固化剔除清单
 - 无公式测试 fixture：SheetJS 写不出公式记录（无 `bf`），公式退化由文档承载
 - `kindFromPath` 补 `.xls` 用例（含大小写 `.XLS`）
 

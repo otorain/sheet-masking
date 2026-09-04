@@ -65,6 +65,21 @@ function xlsCellToPayload(cell: XLSX.CellObject): CellPayload | null {
   }
 }
 
+/** SheetJS 0.20.3 的 CFB 属性集写出器只支持 VT_I4/R8/BOOL/FILETIME/LPWSTR/STRING，
+ *  遇到 WPS 等写入的 VT_UI4 属性（Locale/Behavior）会抛
+ *  "TypedPropertyValue unrecognized type 19 2052"；WPS 自定义属性字典解析失败
+ *  还会产生名为 "undefined" 的伪属性（写出时撞上属性表无名条目同样抛错）。
+ *  写前剔除这些不可写属性（仅影响文件元数据，不影响单元格数据）。 */
+export function sanitizeXlsProps(wb: XLSX.WorkBook): void {
+  for (const props of [wb.Props, wb.Custprops]) {
+    if (!props) continue
+    const bag = props as Record<string, unknown>
+    delete bag.Locale
+    delete bag.Behavior
+    delete bag.undefined
+  }
+}
+
 export async function processXls(
   filePath: string,
   mode: ProcessMode,
@@ -151,6 +166,7 @@ export async function processXls(
   }
 
   // bookSST：默认 Label 记录把字符串截到 255 字符；SST 无长度限制（Excel 原生机制）
+  sanitizeXlsProps(wb)
   XLSX.writeFile(wb, outPath, { bookType: 'biff8', bookSST: true })
   onProgress(100)
   // xls 无公式跳过（写回必然退化），skippedFormulas 恒 0，仅为 ProcessSummary 兼容
