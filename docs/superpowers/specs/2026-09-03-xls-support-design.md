@@ -48,7 +48,7 @@
   （.xls 上限 65536 行 × 256 列，内存风险远低于 xlsx，全量可接受；读失败包装为中文错误，
   对齐 `processXlsx` 风格；`cellStyles` 是 biff8 解析 `!cols` 列宽的门控，见第 3 节）。
 - 逐 sheet 遍历 range（`XLSX.utils.decode_range(ws['!ref'])`，空 sheet 无 `!ref` 跳过）：
-  - **加密**：跳过表头行（`selection.headerRow`）、已有 `E2:` 前缀格、
+  - **加密**：跳过表头行及以上行（行号 ≤ `selection.headerRow`）、已有 `E2:` 前缀格、
     非 文本/数字/日期 格（布尔 `t:'b'`、错误 `t:'e'`、空 `t:'z'` 跳过，
     对齐 `valueToPayload` 语义）。**公式格不跳过**（见第 3 节：公式写回必然退化，
     跳过会让选中列的缓存值明文残留），按缓存值类型照常加密，`skippedFormulas`

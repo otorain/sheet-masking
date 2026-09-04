@@ -27,7 +27,7 @@ export interface AnalyzeResult {
 }
 
 export interface SheetSelection {
-  /** 1-based 表头行：加密时跳过该行（表头列名不是敏感数据，且保持已脱敏文件可再次分析） */
+  /** 1-based 表头行：加密时跳过该行及以上所有行（表头列名与上方标题/注释都不是敏感数据，且保持已脱敏文件可再次分析） */
   headerRow: number
   /** 选中列（1-based 列号） */
   cols: number[]
