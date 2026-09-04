@@ -177,7 +177,7 @@ export async function processXlsx(
           cell.value = encryptPayload(ctx, payload)
           processedCells++
         } else {
-          // 还原：凡 ENC1: 前缀自动还原，与列位置无关（增删列/调列序/另存均可还原）
+          // 还原：凡 E2: 前缀自动还原，与列位置无关（增删列/调列序/另存均可还原）
           const value = cell.value
           if (!isEncrypted(value)) continue
           const isFirst = !firstEncSeen
@@ -186,7 +186,7 @@ export async function processXlsx(
             cell.value = payloadToValue(decryptPayload(ctx, value))
             processedCells++
           } catch {
-            // 第一个 ENC1 格即失败 → 密码错误，整体中止；个别失败 → 记录地址继续
+            // 第一个 E2 格即失败 → 密码错误，整体中止；个别失败 → 记录地址继续
             if (isFirst) throw new Error('密码不符或文件被篡改')
             failedCells.push(`${ws.name}!${cell.address}`)
           }

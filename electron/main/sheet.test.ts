@@ -224,7 +224,7 @@ describe('processXlsx 加密→还原往返', () => {
     expect(dws.getCell('A5').value).toBe('合并备注')
   })
 
-  it('密码错误：第一个 ENC1 格即失败，整体中止', async () => {
+  it('密码错误：第一个 E2 格即失败，整体中止', async () => {
     const src = path.join(dir, 'wrongpw.xlsx')
     const enc = path.join(dir, 'wrongpw-enc.xlsx')
     await buildFixture(src)
@@ -240,7 +240,7 @@ describe('processXlsx 加密→还原往返', () => {
     const enc = path.join(dir, 'partial-enc.xlsx')
     await buildFixture(src)
     await processXlsx(src, 'encrypt', { 订单: { headerRow: 2, cols: [2, 3] } }, enc, ctx, () => {})
-    // 篡改非首个 ENC1 格（C3；行优先扫描序上 B3 在前且完好）
+    // 篡改非首个 E2 格（C3；行优先扫描序上 B3 在前且完好）
     const wb = new ExcelJS.Workbook()
     await wb.xlsx.readFile(enc)
     const ws = wb.getWorksheet('订单')!

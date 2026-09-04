@@ -143,7 +143,7 @@ describe('processCsv 加密→还原往返', () => {
     expect(decText).toBe(original)
   })
 
-  it('密码错误：第一个 ENC1 格即失败，整体中止', async () => {
+  it('密码错误：第一个 E2 格即失败，整体中止', async () => {
     const src = path.join(dir, 'wrongpw.csv')
     fs.writeFileSync(src, UTF8_CSV, 'utf8')
     const enc = path.join(dir, 'wrongpw-enc.csv')
@@ -178,7 +178,7 @@ describe('processCsv 加密→还原往返', () => {
     expect(fs.existsSync(dec)).toBe(false)
   })
 
-  it('第二档失败：篡改非首个 ENC1 格 → 记录地址继续，其余格正常还原', async () => {
+  it('第二档失败：篡改非首个 E2 格 → 记录地址继续，其余格正常还原', async () => {
     const src = path.join(dir, 'tamper.csv')
     fs.writeFileSync(src, UTF8_CSV, 'utf8')
     const enc = path.join(dir, 'tamper-enc.csv')
@@ -197,7 +197,7 @@ describe('processCsv 加密→还原往返', () => {
     expect(summary.failedCells).toEqual(['行3列2'])
     expect(summary.processedCells).toBe(1)
     const decLines = fs.readFileSync(dec, 'utf8').slice(1).split('\r\n')
-    expect(decLines[1]).toBe('A001,张三,13800138000') // 首个 ENC1 格正常还原
+    expect(decLines[1]).toBe('A001,张三,13800138000') // 首个 E2 格正常还原
     expect(isEncrypted(decLines[2].split(',')[1])).toBe(true) // 篡改格原样保留
   })
 })

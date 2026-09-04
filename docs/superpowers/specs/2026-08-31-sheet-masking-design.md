@@ -94,7 +94,7 @@ interface SheetAnalysis {
 - `mode: 'encrypt' | 'decrypt'`；xlsx 全量加载（保真），遍历所有 worksheet
 - encrypt：按 selections（每 sheet 独立的列号集合）加密字面量单元格；
   跳过表头行及以上所有行（标题/注释行不加密）
-- decrypt：扫描全部 sheet，凡 `ENC1:` 前缀自动还原，无需逐列勾选
+- decrypt：扫描全部 sheet，凡 `E2:` 前缀自动还原，无需逐列勾选
 - 按已处理行数 `onProgress(percent)` 推送；每 N 行 `setImmediate` 让出事件循环
 - 极端文件 OOM → 捕获并明确报错，建议用户拆分文件（不做降级引擎）
 
