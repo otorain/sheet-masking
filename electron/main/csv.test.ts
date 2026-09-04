@@ -103,6 +103,34 @@ describe('processCsv 加密→还原往返', () => {
     expect(decText).toBe(UTF8_CSV)
   })
 
+  it('表头以上的注释行不加密', async () => {
+    const src = path.join(dir, 'comment.csv')
+    const original = '订单报表（导出）\n订单号,姓名,手机号\nA001,张三,13800138000\n'
+    fs.writeFileSync(src, original, 'utf8')
+    const enc = path.join(dir, 'comment-enc.csv')
+    const summary = await processCsv(
+      src,
+      'encrypt',
+      { headerRow: 2, cols: [1, 2] },
+      enc,
+      ctx,
+      () => {},
+    )
+    expect(summary.processedCells).toBe(2) // 第 3 行的 A001、张三（第 1、2 行跳过）
+
+    const lines = fs.readFileSync(enc, 'utf8').slice(1).split('\r\n') // slice(1) 去 BOM
+    expect(lines[0]).toBe('订单报表（导出）') // 表头以上注释行原样输出
+    expect(lines[1]).toBe('订单号,姓名,手机号') // 表头行不动
+    const cells = lines[2].split(',')
+    expect(isEncrypted(cells[0])).toBe(true)
+    expect(isEncrypted(cells[1])).toBe(true)
+
+    // 还原后与原文一致
+    const dec = path.join(dir, 'comment-dec.csv')
+    await processCsv(enc, 'decrypt', undefined, dec, ctx, () => {})
+    expect(fs.readFileSync(dec, 'utf8').slice(1).replace(/\r\n/g, '\n')).toBe(original)
+  })
+
   it('GBK 输入往返：输出统一为 UTF-8 BOM', async () => {
     const src = path.join(dir, 'gbk-rt.csv')
     const original = '卡号,备注\n6222020200112233,张三\n'

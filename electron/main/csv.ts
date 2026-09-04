@@ -167,8 +167,8 @@ export async function processCsv(
       rowNo++
       const cells = (row as unknown[]).map(String)
       if (rowNo === 1) stripBom(cells)
-      if (mode === 'encrypt' && selection && rowNo === selection.headerRow) {
-        // 加密跳过表头行（与 xlsx 路径一致），照原样写出
+      if (mode === 'encrypt' && selection && rowNo <= selection.headerRow) {
+        // 加密跳过表头行及以上行（与 xlsx 路径一致），照原样写出
       } else {
         for (let c = 0; c < cells.length; c++) {
           if (mode === 'encrypt') {
