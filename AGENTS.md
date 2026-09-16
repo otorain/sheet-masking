@@ -22,6 +22,13 @@ AES-256-GCM 可逆加密。从 electron-vite-vue 模板改造，pnpm 11.3.0 管�
   root 属主、挂持久 WINEPREFIX 目录；本机 docker 免 sudo）
 - 未配置签名证书：安装包未签名（SmartScreen 会提示）；win/linux 图标已配置
   （`build/icon.ico` / `build/icon.png`）
+- electron-builder v26 在 CI 上检测到 tag 时**默认 publish=onTag**（v27 移除）：
+  无 GH_TOKEN 时静默空转，注入 GITHUB_TOKEN 就会自行发布。本仓库发布统一走 CI
+  的 action-gh-release，CI 打包一律显式 `electron-builder --publish never`，且
+  打包 job 不注入 GITHUB_TOKEN
+- `release/${version}/` 里除安装包外还有 `win-unpacked/`（含 400MB+ 原始 exe）、
+  `linux-unpacked/`、blockmap、`latest*.yml`：CI 上传/Release 附件必须用窄 glob
+  （`release/*/*.exe` 等）排除，`**/*.exe` 会误吞 unpacked 里的原始 exe
 
 ## 架构要点（不看代码容易踩的坑）
 
@@ -55,8 +62,10 @@ AES-256-GCM 可逆加密。从 electron-vite-vue 模板改造，pnpm 11.3.0 管�
   **与 2026-08-31 之前的 ENC1 格式不兼容**，无历史数据故未留兼容代码
 - `app.getPath('userData')` 跟随 package.json `name`（sheet-masking）；改 name
   会整体搬迁配置目录
-- CI（`.github/workflows/build.yml`）是模板遗留，用 `npm install` 而非 pnpm；
-  本地一律用 pnpm
+- CI（`.github/workflows/build.yml`）：push main / PR / 手动触发跑 verify
+  （vitest + 双 tsc + vite build）；推 `v*` tag 时 verify 过后打包 win(NSIS) +
+  linux(AppImage) 并自动建 GitHub Release（设计文档 2026-09-16-github-actions-ci）。
+  全链路用 pnpm（action-setup 读 packageManager 字段），本地一律用 pnpm
 - SheetJS（xlsx 包）走 CDN tarball 依赖（npm registry 的 0.18.5 有未修 CVE，官方新版
   只发 cdn.sheetjs.com，install 需可达）；其 ESM 构建不自动加载 node:fs，
   readFile/writeFile 前必须 `XLSX.set_fs(fs)`；biff8 写回不保留公式与样式，
