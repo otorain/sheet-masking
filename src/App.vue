@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { CircleAlert, Settings } from '@lucide/vue'
 import PasswordGate from './components/PasswordGate.vue'
 import MainFlow from './components/MainFlow.vue'
 import SettingsDialog from './components/SettingsDialog.vue'
@@ -34,9 +35,15 @@ function onRulesSaved() {
     <div class="mx-auto max-w-4xl">
       <div class="mb-4 flex items-center justify-between">
         <h1 class="text-xl font-bold">报表脱敏工具</h1>
-        <button v-if="view === 'main'" class="btn btn-sm" @click="openSettings">设置</button>
+        <button v-if="view === 'main'" class="btn btn-sm" @click="openSettings">
+          <Settings class="size-4" />
+          设置
+        </button>
       </div>
-      <div v-if="errorMsg" class="alert alert-error mb-4">{{ errorMsg }}</div>
+      <div v-if="errorMsg" class="alert alert-error mb-4">
+        <CircleAlert class="size-5 shrink-0" />
+        <span>{{ errorMsg }}</span>
+      </div>
       <PasswordGate v-if="view === 'gate-setup'" mode="setup" @ready="view = 'main'" />
       <PasswordGate
         v-else-if="view === 'gate-unlock'"

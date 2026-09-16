@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { Trash2 } from '@lucide/vue'
+import { CircleAlert, CircleCheck, KeyRound, Plus, Trash2, TriangleAlert } from '@lucide/vue'
 import { deepUnwrap } from '../lib/serialize'
 import { sortTerms } from '../lib/sort'
 import ResetPassword from './ResetPassword.vue'
@@ -142,8 +142,14 @@ function onReset() {
     <div class="modal-box flex max-h-[85vh] max-w-2xl flex-col">
       <div class="shrink-0 space-y-4">
         <h3 class="text-lg font-bold">设置</h3>
-        <div v-if="errorMsg" class="alert alert-error">{{ errorMsg }}</div>
-        <div v-if="okMsg" class="alert alert-success">{{ okMsg }}</div>
+        <div v-if="errorMsg" class="alert alert-error">
+          <CircleAlert class="size-5 shrink-0" />
+          <span>{{ errorMsg }}</span>
+        </div>
+        <div v-if="okMsg" class="alert alert-success">
+          <CircleCheck class="size-5 shrink-0" />
+          <span>{{ okMsg }}</span>
+        </div>
       </div>
 
       <div class="mt-4 min-h-0 flex-1 space-y-4 overflow-y-auto">
@@ -161,7 +167,10 @@ function onReset() {
                     :placeholder="section.placeholder"
                     @keyup.enter="addKeyword(section.kind)"
                   >
-                  <button class="btn btn-soft btn-sm join-item" @click="addKeyword(section.kind)">添加</button>
+                  <button class="btn btn-soft btn-sm join-item" @click="addKeyword(section.kind)">
+                    <Plus class="size-4" />
+                    添加
+                  </button>
                 </div>
                 <div
                   class="max-h-40 overflow-y-auto rounded-box border border-base-300 bg-base-100"
@@ -199,7 +208,10 @@ function onReset() {
                   placeholder="如：^ORD-\d+$"
                   @keyup.enter="addPattern"
                 >
-                <button class="btn btn-soft btn-sm join-item" @click="addPattern">添加</button>
+                <button class="btn btn-soft btn-sm join-item" @click="addPattern">
+                  <Plus class="size-4" />
+                  添加
+                </button>
               </div>
               <div class="max-h-40 overflow-y-auto rounded-box border border-base-300 bg-base-100">
                 <div v-if="!config.patterns.length" class="px-3 py-2 text-sm opacity-50">
@@ -227,13 +239,19 @@ function onReset() {
             <div class="card-body">
               <h2 class="card-title">修改密码</h2>
               <div class="alert alert-warning text-sm">
-                注意：修改密码后，此前用旧密码脱敏的所有文件将无法再还原。请先还原所有文件，再修改密码。
+                <TriangleAlert class="size-5 shrink-0" />
+                <span>
+                  注意：修改密码后，此前用旧密码脱敏的所有文件将无法再还原。请先还原所有文件，再修改密码。
+                </span>
               </div>
               <input v-model="oldPassword" type="password" class="input input-bordered input-sm w-full" placeholder="原密码">
               <input v-model="newPassword" type="password" class="input input-bordered input-sm w-full" placeholder="新密码">
               <input v-model="newPassword2" type="password" class="input input-bordered input-sm w-full" placeholder="确认新密码">
               <div class="flex items-center justify-between">
-                <button class="btn btn-warning btn-sm" @click="submitChangePassword">修改密码</button>
+                <button class="btn btn-warning btn-sm" @click="submitChangePassword">
+                  <KeyRound class="size-4" />
+                  修改密码
+                </button>
                 <ResetPassword label="忘记原密码？重置" @reset="onReset" />
               </div>
             </div>
@@ -258,7 +276,10 @@ function onReset() {
       </p>
       <div class="modal-action">
         <button class="btn" @click="confirmDialog?.close()">取消</button>
-        <button class="btn btn-error" @click="confirmDelete()">删除</button>
+        <button class="btn btn-error" @click="confirmDelete()">
+          <Trash2 class="size-4" />
+          删除
+        </button>
       </div>
     </div>
     <form method="dialog" class="modal-backdrop"><button>取消</button></form>

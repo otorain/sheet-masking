@@ -1,5 +1,13 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue'
+import {
+  CircleAlert,
+  CircleCheck,
+  EyeOff,
+  FolderOpen,
+  LockKeyhole,
+  LockKeyholeOpen,
+} from '@lucide/vue'
 import { deepUnwrap } from '../lib/serialize'
 import { mergeSelections } from '../lib/selections'
 import type {
@@ -147,13 +155,17 @@ onBeforeUnmount(() => offProgress?.())
       <div class="card-body flex-row items-center gap-3">
         <button class="btn btn-primary" :disabled="busy" @click="pickFile">
           <span v-if="busy" class="loading loading-spinner loading-xs" />
+          <FolderOpen v-else class="size-4" />
           选择文件（.xlsx / .xls / .csv）
         </button>
         <span v-if="analysis" class="truncate text-sm opacity-70">{{ analysis.filePath }}</span>
       </div>
     </div>
 
-    <div v-if="errorMsg" class="alert alert-error">{{ errorMsg }}</div>
+    <div v-if="errorMsg" class="alert alert-error">
+      <CircleAlert class="size-5 shrink-0" />
+      <span>{{ errorMsg }}</span>
+    </div>
 
     <template v-if="analysis">
       <div
@@ -164,7 +176,10 @@ onBeforeUnmount(() => offProgress?.())
         <input type="checkbox" checked>
         <div class="collapse-title flex items-center gap-2 font-medium">
           {{ sheet.name }}
-          <span v-if="sheet.hidden" class="badge badge-warning badge-sm">隐藏 sheet</span>
+          <span v-if="sheet.hidden" class="badge badge-warning badge-sm gap-1">
+            <EyeOff class="size-3" />
+            隐藏 sheet
+          </span>
           <span class="badge badge-ghost badge-sm">
             已选 {{ selectedCount(sheet.name) }}/{{ sheet.headers.length }} 列
           </span>
@@ -211,23 +226,32 @@ onBeforeUnmount(() => offProgress?.())
       </div>
 
       <div class="flex items-center gap-3">
-        <button class="btn btn-warning" :disabled="busy" @click="run('encrypt')">脱敏</button>
-        <button class="btn btn-success" :disabled="busy" @click="run('decrypt')">还原</button>
+        <button class="btn btn-warning" :disabled="busy" @click="run('encrypt')">
+          <LockKeyhole class="size-4" />
+          脱敏
+        </button>
+        <button class="btn btn-success" :disabled="busy" @click="run('decrypt')">
+          <LockKeyholeOpen class="size-4" />
+          还原
+        </button>
         <template v-if="progress !== null">
           <progress class="progress progress-primary w-64" :value="progress" max="100" />
           <span class="text-sm">{{ progress }}%</span>
         </template>
       </div>
 
-      <div v-if="summary" class="alert alert-success flex-col items-start">
-        <div>
-          完成：处理 {{ summary.processedCells }} 个单元格，跳过
-          {{ summary.skippedFormulas }} 个公式单元格
-        </div>
-        <div class="text-sm">输出：{{ summary.outPath }}</div>
-        <div v-if="summary.failedCells.length" class="text-sm">
-          {{ summary.failedCells.length }} 个单元格还原失败（文件在加密后可能被编辑/损坏）：
-          {{ summary.failedCells.join('、') }}
+      <div v-if="summary" class="alert alert-success">
+        <CircleCheck class="size-5 shrink-0" />
+        <div class="flex flex-col items-start">
+          <div>
+            完成：处理 {{ summary.processedCells }} 个单元格，跳过
+            {{ summary.skippedFormulas }} 个公式单元格
+          </div>
+          <div class="text-sm">输出：{{ summary.outPath }}</div>
+          <div v-if="summary.failedCells.length" class="text-sm">
+            {{ summary.failedCells.length }} 个单元格还原失败（文件在加密后可能被编辑/损坏）：
+            {{ summary.failedCells.join('、') }}
+          </div>
         </div>
       </div>
     </template>

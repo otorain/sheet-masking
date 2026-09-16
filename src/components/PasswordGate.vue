@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { CircleAlert, KeyRound, LockKeyholeOpen } from '@lucide/vue'
 import ResetPassword from './ResetPassword.vue'
 
 const props = defineProps<{ mode: 'setup' | 'unlock' }>()
@@ -61,9 +62,14 @@ async function submit() {
         placeholder="确认密码"
         @keyup.enter="submit"
       >
-      <div v-if="errorMsg" class="alert alert-error text-sm">{{ errorMsg }}</div>
+      <div v-if="errorMsg" class="alert alert-error text-sm">
+        <CircleAlert class="size-5 shrink-0" />
+        <span>{{ errorMsg }}</span>
+      </div>
       <button class="btn btn-primary" :disabled="busy" @click="submit">
         <span v-if="busy" class="loading loading-spinner loading-xs" />
+        <KeyRound v-else-if="mode === 'setup'" class="size-4" />
+        <LockKeyholeOpen v-else class="size-4" />
         {{ mode === 'setup' ? '设置并进入' : '解锁' }}
       </button>
       <ResetPassword v-if="mode === 'unlock'" label="忘记密码？重置" @reset="emit('reset')" />

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { CircleAlert, RotateCcw } from '@lucide/vue'
 
 defineProps<{ label: string }>()
 const emit = defineEmits<{ reset: [] }>()
@@ -33,11 +34,15 @@ async function confirmReset() {
       <p class="py-4 text-sm">
         重置后需要重新设置主密码。<span class="font-semibold text-error">此前用旧密码脱敏的所有文件将无法再还原。</span>自定义规则会保留。
       </p>
-      <div v-if="errorMsg" class="alert alert-error mb-3 text-sm">{{ errorMsg }}</div>
+      <div v-if="errorMsg" class="alert alert-error mb-3 text-sm">
+        <CircleAlert class="size-5 shrink-0" />
+        <span>{{ errorMsg }}</span>
+      </div>
       <div class="modal-action">
         <button class="btn btn-ghost" :disabled="busy" @click="dialog?.close()">取消</button>
         <button class="btn btn-error" :disabled="busy" @click="confirmReset">
           <span v-if="busy" class="loading loading-spinner loading-xs" />
+          <RotateCcw v-else class="size-4" />
           确认重置
         </button>
       </div>
