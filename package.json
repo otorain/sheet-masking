@@ -24,6 +24,7 @@
     "postinstall": "electron-builder install-app-deps"
   },
   "devDependencies": {
+    "@lucide/vue": "^1.46.0",
     "@types/node": "^26.2.0",
     "@vitejs/plugin-vue": "^6.0.7",
     "electron": "^42.1.0",

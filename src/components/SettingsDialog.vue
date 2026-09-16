@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { Trash2 } from '@lucide/vue'
 import { deepUnwrap } from '../lib/serialize'
+import { sortTerms } from '../lib/sort'
 import ResetPassword from './ResetPassword.vue'
 import type { RulesConfig } from '../../electron/shared/types'
 
@@ -17,7 +19,7 @@ const KEYWORD_SECTIONS: { kind: KeywordKind; title: string; placeholder: string 
 
 const dialog = ref<HTMLDialogElement | null>(null)
 const confirmDialog = ref<HTMLDialogElement | null>(null)
-const pendingDelete = ref<{ kind: KeywordKind | 'patterns'; index: number; value: string } | null>(null)
+const pendingDelete = ref<{ kind: KeywordKind | 'patterns'; value: string } | null>(null)
 const config = ref<RulesConfig>({ exact: [], contains: [], startsWith: [], endsWith: [], patterns: [] })
 const newKeyword = ref<Record<KeywordKind, string>>({
   exact: '',
@@ -73,17 +75,17 @@ function addKeyword(kind: KeywordKind) {
   newKeyword.value[kind] = ''
 }
 
-/** 点 ✕ 不直接删除：先弹确认框 */
-function askDelete(kind: KeywordKind | 'patterns', index: number, value: string) {
-  pendingDelete.value = { kind, index, value }
+/** 点删除不直接生效：先弹确认框 */
+function askDelete(kind: KeywordKind | 'patterns', value: string) {
+  pendingDelete.value = { kind, value }
   confirmDialog.value?.showModal()
 }
 
-/** 确认删除：从对应数组移除并立即生效 */
+/** 确认删除：按值从对应数组移除（列表经排序展示，索引与数组不对应，故按值定位；各类内已去重）并立即生效 */
 function confirmDelete() {
   const target = pendingDelete.value
   if (target) {
-    config.value[target.kind].splice(target.index, 1)
+    config.value[target.kind] = config.value[target.kind].filter((v) => v !== target.value)
     applyRules()
   }
   pendingDelete.value = null
@@ -159,13 +161,28 @@ function onReset() {
                     :placeholder="section.placeholder"
                     @keyup.enter="addKeyword(section.kind)"
                   >
-                  <button class="btn btn-sm join-item" @click="addKeyword(section.kind)">添加</button>
+                  <button class="btn btn-soft btn-sm join-item" @click="addKeyword(section.kind)">添加</button>
                 </div>
-                <div class="flex flex-wrap gap-1">
-                  <span v-for="(kw, i) in config[section.kind]" :key="kw" class="badge badge-outline gap-1">
-                    {{ kw }}
-                    <button class="cursor-pointer text-error" @click="askDelete(section.kind, i, kw)">✕</button>
-                  </span>
+                <div
+                  class="max-h-40 overflow-y-auto rounded-box border border-base-300 bg-base-100"
+                >
+                  <div v-if="!config[section.kind].length" class="px-3 py-2 text-sm opacity-50">
+                    暂无
+                  </div>
+                  <div
+                    v-for="kw in sortTerms(config[section.kind])"
+                    :key="kw"
+                    class="group flex items-center justify-between gap-2 px-3 py-1 hover:bg-base-200"
+                  >
+                    <span class="truncate">{{ kw }}</span>
+                    <button
+                      class="btn btn-ghost btn-xs shrink-0 text-error opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                      :aria-label="`删除关键词 ${kw}`"
+                      @click="askDelete(section.kind, kw)"
+                    >
+                      <Trash2 class="size-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -182,13 +199,26 @@ function onReset() {
                   placeholder="如：^ORD-\d+$"
                   @keyup.enter="addPattern"
                 >
-                <button class="btn btn-sm join-item" @click="addPattern">添加</button>
+                <button class="btn btn-soft btn-sm join-item" @click="addPattern">添加</button>
               </div>
-              <div class="flex flex-wrap gap-1">
-                <span v-for="(p, i) in config.patterns" :key="p" class="badge badge-outline gap-1 font-mono">
-                  {{ p }}
-                  <button class="cursor-pointer text-error" @click="askDelete('patterns', i, p)">✕</button>
-                </span>
+              <div class="max-h-40 overflow-y-auto rounded-box border border-base-300 bg-base-100">
+                <div v-if="!config.patterns.length" class="px-3 py-2 text-sm opacity-50">
+                  暂无
+                </div>
+                <div
+                  v-for="p in sortTerms(config.patterns)"
+                  :key="p"
+                  class="group flex items-center justify-between gap-2 px-3 py-1 hover:bg-base-200"
+                >
+                  <span class="truncate font-mono">{{ p }}</span>
+                  <button
+                    class="btn btn-ghost btn-xs shrink-0 text-error opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                    :aria-label="`删除正则 ${p}`"
+                    @click="askDelete('patterns', p)"
+                  >
+                    <Trash2 class="size-4" />
+                  </button>
+                </div>
               </div>
             </div>
           </div>
