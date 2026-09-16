@@ -1,6 +1,6 @@
 {
   "name": "sheet-masking",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "main": "dist-electron/main/index.js",
   "description": "财务报表可逆脱敏桌面工具（xlsx/xls/csv，确定性 AES-256-GCM）",
   "author": "",
