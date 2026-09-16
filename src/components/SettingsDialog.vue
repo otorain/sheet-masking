@@ -10,11 +10,11 @@ const emit = defineEmits<{ saved: []; reset: [] }>()
 
 type KeywordKind = 'exact' | 'contains' | 'startsWith' | 'endsWith'
 
-const KEYWORD_SECTIONS: { kind: KeywordKind; title: string; placeholder: string }[] = [
-  { kind: 'exact', title: '完全匹配', placeholder: '表头恰好等于该词才命中（如：工号）' },
-  { kind: 'contains', title: '包含', placeholder: '表头包含该词即命中（如：卡号）' },
-  { kind: 'startsWith', title: '以关键词开头', placeholder: '表头以该词开头（如：手机）' },
-  { kind: 'endsWith', title: '以关键词结尾', placeholder: '表头以该词结尾（如：电话）' },
+const KEYWORD_SECTIONS: { kind: KeywordKind; title: string; hint: string }[] = [
+  { kind: 'exact', title: '完全匹配', hint: '如「工号」命中「工号」，不命中「员工工号」' },
+  { kind: 'contains', title: '包含', hint: '如「卡号」命中「银行卡号」，不命中「卡类型」' },
+  { kind: 'startsWith', title: '以关键词开头', hint: '如「手机」命中「手机号码」，不命中「联系手机」' },
+  { kind: 'endsWith', title: '以关键词结尾', hint: '如「电话」命中「联系电话」，不命中「电话号码」' },
 ]
 
 const dialog = ref<HTMLDialogElement | null>(null)
@@ -159,12 +159,14 @@ function onReset() {
               <h2 class="card-title">表头关键词</h2>
               <p class="text-xs opacity-60">增删立即生效，无需保存</p>
               <div v-for="section in KEYWORD_SECTIONS" :key="section.kind" class="space-y-1">
-                <h3 class="text-sm font-semibold">{{ section.title }}</h3>
+                <h3 class="text-sm font-semibold">
+                  {{ section.title }}
+                  <span class="ml-1 text-xs font-normal opacity-60">{{ section.hint }}</span>
+                </h3>
                 <div class="join w-full">
                   <input
                     v-model="newKeyword[section.kind]"
                     class="input input-bordered input-sm join-item w-full"
-                    :placeholder="section.placeholder"
                     @keyup.enter="addKeyword(section.kind)"
                   >
                   <button class="btn btn-soft btn-sm join-item" @click="addKeyword(section.kind)">
