@@ -1,13 +1,18 @@
+
+https://github.com/user-attachments/assets/f19c5e3c-73d8-4b5e-9ab9-ef2974d11283
 # sheet-masking（报表脱敏工具）
 
+
+https://github.com/user-attachments/assets/15fef853-2ddc-4b93-b0ef-2e7217d2f024
+
+
 对财务/公司数据报表（.xlsx / .xls / .csv）做**可逆脱敏**的桌面工具：加密敏感列，
-事后可用同一主密码完整还原。基于 electron-vite-vue（Electron 42 + Vue 3 +
-Vite 8 + Tailwind v4/daisyUI）。
+事后可用同一主密码完整还原。
 
 ## 用法
 
 1. 首次启动设置主密码（经系统安全存储保存，Windows 为 DPAPI，不明文落盘；
-   换机/换系统用户后需重新输入）
+换机/换系统用户后需重新输入）
 2. 选择 .xlsx / .xls / .csv 文件 → 按 sheet 展示表头勾选表（关键词规则自动勾选敏感列，
    可手动调整；表头行自动探测，可下拉修正后重跑规则；隐藏 sheet 照常列出）
 3. 「脱敏」生成 `原名.已脱敏.扩展名`；「还原」对任何含 E2 密文的文件全文
@@ -51,6 +56,4 @@ pnpm test          # vitest 单测（crypto/rules/sheet/xls/csv）
 pnpm run build     # 类型检查 + 构建 + electron-builder 打包
 ```
 
-Tailwind CSS v4 + daisyUI 经 `@tailwindcss/vite` 与 `@plugin "daisyui"` 接入
-（见 `src/style.css`）。Windows NSIS 安装包需在 Windows 机器或 CI 构建
-（Linux 交叉构建 rcedit 需 wine）。
+Windows NSIS 安装包需在 Windows 机器或 CI 构建（Linux 交叉构建 rcedit 需 wine）。
