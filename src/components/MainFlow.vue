@@ -131,7 +131,13 @@ async function run(mode: ProcessMode) {
       // selections.value 是 reactive Proxy，contextBridge 无法克隆，需深解包
       selections: deepUnwrap(selections.value),
     })) as ProcessSummary | null
-    if (result) summary.value = result // null = 用户取消了保存对话框
+    // null = 用户取消了保存对话框：什么都不发生，保留工作区状态
+    if (result) {
+      summary.value = result
+      // 处理成功后清空工作区（文件与列勾选），只留完成提示
+      analysis.value = null
+      selections.value = {}
+    }
   } catch (err) {
     errorMsg.value = (err as Error).message
   } finally {
@@ -165,6 +171,22 @@ onBeforeUnmount(() => offProgress?.())
     <div v-if="errorMsg" class="alert alert-error">
       <CircleAlert class="size-5 shrink-0" />
       <span>{{ errorMsg }}</span>
+    </div>
+
+    <!-- 处理完成后工作区已清空，提示须独立于 analysis 展示 -->
+    <div v-if="summary" class="alert alert-success">
+      <CircleCheck class="size-5 shrink-0" />
+      <div class="flex flex-col items-start">
+        <div>
+          完成：处理 {{ summary.processedCells }} 个单元格，跳过
+          {{ summary.skippedFormulas }} 个公式单元格
+        </div>
+        <div class="text-sm">输出：{{ summary.outPath }}</div>
+        <div v-if="summary.failedCells.length" class="text-sm">
+          {{ summary.failedCells.length }} 个单元格还原失败（文件在加密后可能被编辑/损坏）：
+          {{ summary.failedCells.join('、') }}
+        </div>
+      </div>
     </div>
 
     <template v-if="analysis">
@@ -238,21 +260,6 @@ onBeforeUnmount(() => offProgress?.())
           <progress class="progress progress-primary w-64" :value="progress" max="100" />
           <span class="text-sm">{{ progress }}%</span>
         </template>
-      </div>
-
-      <div v-if="summary" class="alert alert-success">
-        <CircleCheck class="size-5 shrink-0" />
-        <div class="flex flex-col items-start">
-          <div>
-            完成：处理 {{ summary.processedCells }} 个单元格，跳过
-            {{ summary.skippedFormulas }} 个公式单元格
-          </div>
-          <div class="text-sm">输出：{{ summary.outPath }}</div>
-          <div v-if="summary.failedCells.length" class="text-sm">
-            {{ summary.failedCells.length }} 个单元格还原失败（文件在加密后可能被编辑/损坏）：
-            {{ summary.failedCells.join('、') }}
-          </div>
-        </div>
       </div>
     </template>
   </div>
