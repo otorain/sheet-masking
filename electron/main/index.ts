@@ -35,6 +35,10 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 //
 process.env.APP_ROOT = path.join(__dirname, '../..')
 
+// productName 是中文（报表脱敏工具），钉住 app 名使打包后 userData 仍是
+// sheet-masking，已安装用户的主密码/自定义规则不随改名迁移
+app.setName('sheet-masking')
+
 export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
 export const VITE_DEV_SERVER_URL = process.env.VITE_DEV_SERVER_URL

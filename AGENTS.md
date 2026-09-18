@@ -60,8 +60,9 @@ AES-256-GCM 可逆加密。从 electron-vite-vue 模板改造，pnpm 11.3.0 管�
 - pnpm 11 默认拒绝依赖构建脚本：放行清单在 `pnpm-workspace.yaml` 的 `allowBuilds`
 - 密文格式为 `E2:` 前缀自包含单元格（README「加密格式」一节有完整说明）；
   **与 2026-08-31 之前的 ENC1 格式不兼容**，无历史数据故未留兼容代码
-- `app.getPath('userData')` 跟随 package.json `name`（sheet-masking）；改 name
-  会整体搬迁配置目录
+- `app.getPath('userData')` 已由 `electron/main/index.ts` 顶部的
+  `app.setName('sheet-masking')` 钉住：productName 是中文（报表脱敏工具），
+  打包后 app.getName() 默认取 productName，不钉住会整体搬迁配置目录
 - CI（`.github/workflows/build.yml`）：push main / PR / 手动触发跑 verify
   （vitest + 双 tsc + vite build）；推 `v*` tag 时 verify 过后打包 win(NSIS) +
   linux(AppImage) 并自动建 GitHub Release（设计文档 2026-09-16-github-actions-ci）。
