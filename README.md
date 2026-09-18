@@ -1,5 +1,4 @@
 
-https://github.com/user-attachments/assets/f19c5e3c-73d8-4b5e-9ab9-ef2974d11283
 # sheet-masking（报表脱敏工具）
 
 
