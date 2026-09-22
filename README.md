@@ -1,3 +1,6 @@
+<p align="center">
+  <img src="public/logo.png" alt="sheet-masking logo" width="160" />
+</p>
 
 # sheet-masking（报表脱敏工具）
 
